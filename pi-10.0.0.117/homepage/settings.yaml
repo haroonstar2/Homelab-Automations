@@ -1,0 +1,18 @@
+---
+title: Haroon's Homelab
+theme: dark
+color: slate
+headerStyle: clean
+layout:
+  AI & Automation (10.0.0.118):
+    style: row
+    columns: 3
+  Dev & Task Runner (10.0.0.118):
+    style: row
+    columns: 2
+  Media & Utilities (10.0.0.118):
+    style: row
+    columns: 2
+  Infrastructure & Network:
+    style: row
+    columns: 3

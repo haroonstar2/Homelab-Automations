@@ -1,0 +1,76 @@
+---
+- AI & Automation (10.0.0.118):
+    - Open WebUI (Local AI Chat & RAG):
+        icon: open-webui.png
+        href: http://10.0.0.118:3000
+        description: ChatGPT-style UI & Course PDF Knowledge Base (ai.home:3000)
+        siteMonitor: http://10.0.0.118:3000
+    - n8n Workflow Automation:
+        icon: n8n.png
+        href: http://10.0.0.118:5678
+        description: Job Radar, ArXiv Digest, Tech News & Research Agents (n8n.home:5678)
+        siteMonitor: http://10.0.0.118:5678
+    - SearXNG Private Search:
+        icon: searxng.png
+        href: http://10.0.0.118:8088
+        description: Private metasearch engine & JSON API for AI agents (10.0.0.118:8088)
+        siteMonitor: http://10.0.0.118:8088
+    - Ollama LLM API:
+        icon: ollama.png
+        href: http://10.0.0.118:11434
+        description: Local LLM & Embeddings API endpoint (ollama.home:11434)
+        siteMonitor: http://10.0.0.118:11434
+
+- SaaS Dev & Task Runner (10.0.0.118):
+    - Windmill Task Runner:
+        icon: windmill.png
+        href: http://10.0.0.118:8100
+        description: Run Python/TS/Bash scripts, cron schedules & UIs (windmill.home:8100)
+        siteMonitor: http://10.0.0.118:8100
+    - Code-Server (VS Code):
+        icon: vscode.png
+        href: http://10.0.0.118:8443
+        description: Browser-based VS Code IDE on 10.0.0.118 (code.home:8443)
+        siteMonitor: http://10.0.0.118:8443
+    - Adminer (SaaS Postgres + pgvector GUI):
+        icon: adminer.png
+        href: http://10.0.0.118:8082
+        description: DB UI for saas-postgres (port 5432, user saas / pass saas_dev_pass) & Redis (port 6379)
+        siteMonitor: http://10.0.0.118:8082
+
+- Media & Utilities (10.0.0.118):
+    - Jellyfin Media Server:
+        icon: jellyfin.png
+        href: http://10.0.0.118:8096
+        description: Media streaming from /mnt/Storage1 (jellyfin.home:8096)
+        siteMonitor: http://10.0.0.118:8096
+    - OpenSpeedTest:
+        icon: openspeedtest.png
+        href: http://10.0.0.118:3004
+        description: LAN & Wi-Fi speed test server (speed.home:3004)
+        siteMonitor: http://10.0.0.118:3004
+
+- Infrastructure & Network:
+    - Pi-hole DNS (10.0.0.117):
+        icon: pi-hole.png
+        href: http://10.0.0.117/admin
+        description: Network-wide ad blocker & local DNS (*.home)
+        siteMonitor: http://10.0.0.117/admin
+    - Uptime Kuma (10.0.0.117):
+        icon: uptime-kuma.png
+        href: http://10.0.0.117:3001
+        description: Service uptime monitoring & alerts (status.home:3001)
+        siteMonitor: http://10.0.0.117:3001
+    - CasaOS Server (10.0.0.118):
+        icon: casaos.png
+        href: http://10.0.0.118:80
+        description: Main server OS dashboard (server.home)
+        siteMonitor: http://10.0.0.118:80
+    - Portainer Server (10.0.0.118):
+        icon: portainer.png
+        href: https://10.0.0.118:9443
+        description: Docker container management on 10.0.0.118
+    - Portainer Pi (10.0.0.117):
+        icon: portainer.png
+        href: https://10.0.0.117:9443
+        description: Docker container management on 10.0.0.117

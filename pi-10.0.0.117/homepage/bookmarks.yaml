@@ -1,0 +1,6 @@
+---
+- Quick Links:
+    - Local DNS Info:
+        - abbr: DNS
+          href: http://10.0.0.117/admin
+          description: Pi-hole DNS (10.0.0.117)

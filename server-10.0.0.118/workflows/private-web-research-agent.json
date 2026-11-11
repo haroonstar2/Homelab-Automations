@@ -1,0 +1,181 @@
+{
+  "id": "XYZ0HvClOaCRsQXQ",
+  "name": "2. Private Web Research AI Agent (SearXNG + Ollama) -> Discord",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b2a20001-0001-4000-8000-000000000001",
+      "name": "Click 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "topic-field",
+              "name": "topic",
+              "value": "Best self-hosted AI tools and home server automations in 2026",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2a20001-0001-4000-8000-000000000002",
+      "name": "Set Research Topic",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://searxng:8080/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.topic }}"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2a20001-0001-4000-8000-000000000003",
+      "name": "Private Web Search (Local SearXNG)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = ($input.first().json.results || []).slice(0, 6);\nconst topic = $('Set Research Topic').first().json.topic;\nconst snippets = results.map((r, i) => `[${i + 1}] ${r.title}\\nURL: ${r.url}\\nSnippet: ${r.content || ''}`).join('\\n\\n');\n\nreturn [{\n  json: {\n    topic,\n    snippets,\n    ollamaBody: {\n      model: 'qwen2.5:3b',\n      stream: false,\n      prompt: `You are a private research assistant. Synthesize the following live web search results about \"${topic}\" into a clear, well-structured summary with key takeaways and markdown source links [Title](URL). Keep total length under 1500 characters.\\n\\nSearch Results:\\n${snippets}`\n    }\n  }\n}];"
+      },
+      "id": "b2a20001-0001-4000-8000-000000000004",
+      "name": "Extract Top Search Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ollamaBody) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "b2a20001-0001-4000-8000-000000000005",
+      "name": "Synthesize Report with Ollama (qwen2.5:3b)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const topic = $('Set Research Topic').first().json.topic;\nconst raw = $input.first().json.response || 'No report generated.';\nconst header = `🔍 **Private AI Research Report:** *${topic}*\\n\\n`;\nconst content = (header + raw).slice(0, 1950);\nreturn [{ json: { content, discordWebhookUrl: 'https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN' } }];"
+      },
+      "id": "b2a20001-0001-4000-8000-000000000006",
+      "name": "Format Report for Discord",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.discordWebhookUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ username: 'Homelab Research Agent', content: $json.content }) }}",
+        "options": {}
+      },
+      "id": "b2a20001-0001-4000-8000-000000000007",
+      "name": "Post Report to Discord",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 300]
+    }
+  ],
+  "connections": {
+    "Click 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Set Research Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Research Topic": {
+      "main": [
+        [
+          {
+            "node": "Private Web Search (Local SearXNG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Private Web Search (Local SearXNG)": {
+      "main": [
+        [
+          {
+            "node": "Extract Top Search Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Top Search Results": {
+      "main": [
+        [
+          {
+            "node": "Synthesize Report with Ollama (qwen2.5:3b)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Synthesize Report with Ollama (qwen2.5:3b)": {
+      "main": [
+        [
+          {
+            "node": "Format Report for Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Report for Discord": {
+      "main": [
+        [
+          {
+            "node": "Post Report to Discord",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
