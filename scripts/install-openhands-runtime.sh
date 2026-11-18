@@ -123,6 +123,11 @@ runuser -u "$agent_user" -- env \
   HOME="$agent_home" \
   XDG_RUNTIME_DIR="$runtime_dir" \
   DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime_dir/bus" \
-  systemctl --user enable --now agent-canvas.service
+  systemctl --user enable agent-canvas.service
+runuser -u "$agent_user" -- env \
+  HOME="$agent_home" \
+  XDG_RUNTIME_DIR="$runtime_dir" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime_dir/bus" \
+  systemctl --user restart agent-canvas.service
 
 echo "Installed and started Agent Canvas $canvas_version for $agent_user."
