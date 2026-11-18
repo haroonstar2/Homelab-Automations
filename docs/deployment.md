@@ -25,10 +25,13 @@ notes and configuration schema; do not change these pins in place on the server.
 
 1. Run `scripts/bootstrap-server.sh --apply` as root.
 2. Run `tests/isolation/verify-rootless-boundary.sh` as root and retain output.
-3. Copy `.env.example` to a server-side `.env`, set mode `0600`, generate every
+3. Seed the dedicated model store with
+   `sudo scripts/seed-ollama-store.sh --apply`. This copies and verifies the
+   active legacy store; it never starts a second writer against that store.
+4. Copy `.env.example` to a server-side `.env`, set mode `0600`, generate every
    required secret, and choose `SWITCH_SERVER_NAME` permanently.
-4. Keep the legacy stack running. Do not reuse its Discord application.
-5. Validate with `docker compose --env-file .env -f compose/<file>.yml config`.
+5. Keep the legacy stack running. Do not reuse its Discord application.
+6. Validate with `docker compose --env-file .env -f compose/<file>.yml config`.
 
 The bootstrap requires `setfacl` so the documented OpenHands container uid
 10001 can access only its explicit state and project roots without making them

@@ -31,6 +31,7 @@ install -d -m 0750 -o "$service_user" -g "$service_user" \
   "$platform_root" \
   "$platform_root/caddy/data" \
   "$platform_root/caddy/config" \
+  "$platform_root/ollama" \
   "$platform_root/open-webui" \
   "$platform_root/searxng-cache" \
   "$platform_root/switch" \
