@@ -156,33 +156,36 @@ jq -n \
     include_secrets: false
   }' >"$work/profile.json"
 
-jq -n \
-  --arg api_key "$litellm_key" \
-  --arg base_url "$litellm_url" \
-  '{
-    llm: {
-      model: "litellm_proxy/local-code",
-      api_key: $api_key,
-      base_url: $base_url,
-      auth_type: "api_key",
-      usage_id: "openhands-local-code-preflight",
-      api_mode: "chat",
-      timeout: 1200,
-      stream_idle_timeout: 1200,
-      drop_params: true,
-      native_tool_calling: true,
-      log_completions: false
-    }
-  }' >"$work/preflight-profile.json"
+jq -n '{
+  model: "local-code",
+  messages: [
+    {role: "system", content: "Reply with the single word ready."},
+    {role: "user", content: "Health check"}
+  ],
+  max_tokens: 8,
+  temperature: 0,
+  stream: false
+}' >"$work/completion-request.json"
 
-api_write POST "/api/profiles/$profile_name/validate" \
-  "$work/preflight-profile.json" 200 "$work/validate-response.json"
-jq -e '.valid == true' "$work/validate-response.json" >/dev/null || {
-  echo "OpenHands rejected the local-code profile during validation." >&2
-  jq -r '.error.message // .message // "No diagnostic message"' \
-    "$work/validate-response.json" >&2
+completion_status="$(curl --silent --show-error \
+  --max-time 1200 \
+  -H "Authorization: Bearer $litellm_key" \
+  -H 'Content-Type: application/json' \
+  --data-binary "@$work/completion-request.json" \
+  --output "$work/completion-response.json" \
+  --write-out '%{http_code}' \
+  "$litellm_url/v1/chat/completions")"
+if [[ "$completion_status" != "200" ]]; then
+  echo "LiteLLM completion preflight returned HTTP $completion_status." >&2
+  jq -r '.error.message // "No diagnostic message"' \
+    "$work/completion-response.json" >&2 || true
   exit 1
-}
+fi
+jq -e '.choices[0].message.content | type == "string" and length > 0' \
+  "$work/completion-response.json" >/dev/null || {
+    echo "LiteLLM completion preflight returned no assistant content." >&2
+    exit 1
+  }
 
 api_write POST "/api/profiles/$profile_name" \
   "$work/profile.json" 201 "$work/profile-response.json"
@@ -195,5 +198,5 @@ jq -e --arg name "$profile_name" '.active_profile == $name' "$work/profiles.json
 }
 
 echo "OpenHands provider connection $provider_action: $provider_name"
-echo "Validated and activated OpenHands LLM profile: $profile_name"
-echo "Model route verified through authenticated LiteLLM: local-code"
+echo "Saved and activated OpenHands LLM profile: $profile_name"
+echo "Completion route verified through authenticated LiteLLM: local-code"
