@@ -29,8 +29,6 @@ fi
 
 install -d -m 0750 -o "$service_user" -g "$service_user" \
   "$platform_root" \
-  "$platform_root/caddy/data" \
-  "$platform_root/caddy/config" \
   "$platform_root/ollama" \
   "$platform_root/open-webui" \
   "$platform_root/searxng-cache" \
@@ -39,6 +37,12 @@ install -d -m 0750 -o "$service_user" -g "$service_user" \
   "$platform_root/openhands/state" \
   "$platform_root/n8n" \
   "$platform_root/backups"
+
+# Caddy runs as uid 0 with all capabilities except NET_BIND_SERVICE dropped.
+# Owning only its two persistent roots lets it write without DAC_OVERRIDE.
+install -d -m 0770 -o root -g "$service_user" \
+  "$platform_root/caddy/data" \
+  "$platform_root/caddy/config"
 
 install -d -m 0750 -o "$agent_user" -g "$agent_user" \
   "$platform_root/workspaces" \

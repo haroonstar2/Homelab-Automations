@@ -29,6 +29,10 @@ platform is operating and evidence shows one is necessary.
   is permitted.
 - `ai-agent` has traverse-only ACL access on the platform root and owns only the
   workspace subtree; it cannot list or read sibling service and backup state.
+- Model, application, and search networks remain internal. LiteLLM, Open WebUI,
+  and SearXNG use separate egress networks so outbound access does not create a
+  shared east-west service network. Open WebUI sends embeddings to the internal
+  Ollama `nomic-embed-text` profile rather than downloading a local model.
 
 Heavy local model concurrency is one until qualification data proves the host
 can safely support more.

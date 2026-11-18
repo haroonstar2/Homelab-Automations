@@ -56,6 +56,7 @@ services:
     networks:
       - model
       - app
+      - litellm_egress
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5)"]
       interval: 30s
@@ -82,6 +83,11 @@ services:
       WEB_SEARCH_ENGINE: searxng
       WEB_SEARCH_RESULT_COUNT: "3"
       SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>&format=json
+      RAG_EMBEDDING_ENGINE: ollama
+      RAG_EMBEDDING_MODEL: nomic-embed-text:latest
+      RAG_OLLAMA_BASE_URL: http://ollama:11434
+      RAG_EMBEDDING_BATCH_SIZE: "1"
+      RAG_EMBEDDING_CONCURRENT_REQUESTS: "1"
     volumes:
       - ${AI_PLATFORM_ROOT:?set AI_PLATFORM_ROOT}/open-webui:/app/backend/data
     expose:
@@ -94,6 +100,8 @@ services:
     networks:
       - app
       - search
+      - model
+      - open_webui_egress
     healthcheck:
       test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
       interval: 30s
@@ -118,6 +126,7 @@ services:
       - "8080"
     networks:
       - search
+      - searxng_egress
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 30s
@@ -178,4 +187,7 @@ networks:
     name: ai-platform-switch-frontend
   openhands_frontend:
     name: ai-platform-openhands-frontend
+  litellm_egress:
+  open_webui_egress:
+  searxng_egress:
 
