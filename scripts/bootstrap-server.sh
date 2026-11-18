@@ -34,7 +34,7 @@ install -d -m 0750 -o "$service_user" -g "$service_user" \
   "$platform_root/searxng-cache" \
   "$platform_root/switch" \
   "$platform_root/switch/postgres" \
-  "$platform_root/openhands/state" \
+  "$platform_root/openhands" \
   "$platform_root/n8n" \
   "$platform_root/backups"
 
@@ -45,6 +45,7 @@ install -d -m 0770 -o root -g "$service_user" \
   "$platform_root/caddy/config"
 
 install -d -m 0750 -o "$agent_user" -g "$agent_user" \
+  "$platform_root/openhands/state" \
   "$platform_root/workspaces" \
   "$platform_root/workspaces/openhands" \
   "$platform_root/workspaces/switch"
@@ -55,6 +56,7 @@ if command -v setfacl >/dev/null 2>&1; then
   # The agent may traverse the platform root to its owned workspace subtree,
   # but cannot list that root or read sibling service/backup directories.
   setfacl -m "u:${agent_user}:--x" "$platform_root"
+  setfacl -m "u:${agent_user}:--x" "$platform_root/openhands"
   setfacl -m u:10001:rwx "$platform_root/openhands/state" "$platform_root/workspaces/openhands"
 else
   echo "setfacl is required for the documented OpenHands container uid 10001." >&2

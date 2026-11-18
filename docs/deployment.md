@@ -84,9 +84,19 @@ export LOCAL_BACKEND_API_KEY='from a mode-0600 environment file'
 agent-canvas --public
 ```
 
-Install exactly `@openhands/agent-canvas@1.41.0` with Node.js 24 and manage it
-with a user systemd unit. Verify that every conversation is a rootless container
-before enabling GitHub automations. Never mount the rootful socket.
+Install the pinned Node.js 24.22.3, uv 0.13.9, and
+`@openhands/agent-canvas@1.41.0` runtime and its user systemd unit with:
+
+```bash
+sudo scripts/install-openhands-runtime.sh --apply
+```
+
+The service listens only on host loopback port `18002`, requires its generated
+agent-only backend key, disables telemetry, and uses
+`OH_CONVERSATION_RUNTIME=docker` with the `ai-agent` rootless Docker socket.
+Expose it through Tailscale Serve only after verifying authentication. Verify
+that every conversation is a rootless container before enabling GitHub
+automations. Never mount the rootful socket.
 
 ## Switch gate
 
