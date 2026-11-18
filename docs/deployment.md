@@ -90,6 +90,7 @@ Install the pinned Node.js 24.22.3, uv 0.13.9, and
 ```bash
 sudo scripts/install-openhands-runtime.sh --apply
 sudo scripts/configure-openhands.sh --apply --env-file .env
+sudo scripts/verify-openhands-isolation.sh --apply
 ```
 
 Public mode keeps backend-key authentication enabled, while the explicit host
