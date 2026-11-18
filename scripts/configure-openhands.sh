@@ -119,26 +119,25 @@ jq -e '.agent_settings.agent_kind == "openhands"' \
   }
 
 jq -n \
-  --arg base_url "$litellm_openai_url" \
-  '{
-    agent_settings_diff: {
-      llm: {
-        model: "openai/local-code",
-        base_url: $base_url
-      }
-    }
-  }' >"$work/model-settings.json"
-
-echo "Persisting local-code model route..."
-api_write PATCH /api/settings "$work/model-settings.json" 200 \
-  "$work/model-settings-response.json"
-
-jq -n \
   --arg api_key "$litellm_key" \
   '{agent_settings_diff: {llm: {api_key: $api_key}}}' \
   >"$work/key-settings.json"
 echo "Persisting encrypted local-code credential..."
 api_write PATCH /api/settings "$work/key-settings.json" 200 \
+  "$work/key-settings-response.json"
+
+jq -n \
+  --arg base_url "$litellm_openai_url" \
+  '{agent_settings_diff: {llm: {base_url: $base_url}}}' \
+  >"$work/base-url-settings.json"
+echo "Persisting LiteLLM OpenAI-compatible base URL..."
+api_write PATCH /api/settings "$work/base-url-settings.json" 200 \
+  "$work/base-url-settings-response.json"
+
+jq -n '{agent_settings_diff: {llm: {model: "openai/local-code"}}}' \
+  >"$work/model-settings.json"
+echo "Persisting openai/local-code model alias..."
+api_write PATCH /api/settings "$work/model-settings.json" 200 \
   "$work/settings-response.json"
 jq -e '
   .llm_api_key_is_set == true and
