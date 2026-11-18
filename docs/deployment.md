@@ -103,7 +103,8 @@ rootless Docker daemon. It performs an authenticated completion through the
 persist only its required model, key, and base URL without printing either API
 key. Agent Canvas initially persists ACP settings with `agent_context: null`,
 so the command first migrates that field to an object and explicitly switches
-the discriminator to the standard `openhands` agent variant. This
+the discriminator to a valid default `openhands` agent before applying the LLM
+diff. This
 intentionally avoids Agent Server 1.62's profile persistence paths, which
 return HTTP 500 with an encrypted provider reference or a plaintext draft key
 when `OH_SECRET_KEY` is enabled.

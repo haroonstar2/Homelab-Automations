@@ -106,13 +106,22 @@ jq -n '{agent_settings_diff: {agent_context: {}}}' \
 api_write PATCH /api/settings "$work/context-migration.json" 200 \
   "$work/context-migration-response.json"
 
+jq -n '{agent_settings_diff: {agent_kind: "openhands", agent_context: {}}}' \
+  >"$work/agent-migration.json"
+echo "Migrating Agent Canvas agent variant to OpenHands..."
+api_write PATCH /api/settings "$work/agent-migration.json" 200 \
+  "$work/agent-migration-response.json"
+jq -e '.agent_settings.agent_kind == "openhands"' \
+  "$work/agent-migration-response.json" >/dev/null || {
+    echo "Agent Canvas did not switch to the OpenHands agent variant." >&2
+    exit 1
+  }
+
 jq -n \
   --arg api_key "$litellm_key" \
   --arg base_url "$litellm_url" \
   '{
     agent_settings_diff: {
-      agent_kind: "openhands",
-      agent_context: {},
       llm: {
         model: "litellm_proxy/local-code",
         api_key: $api_key,
@@ -121,6 +130,7 @@ jq -n \
     }
   }' >"$work/settings.json"
 
+echo "Persisting encrypted local-code settings..."
 api_write PATCH /api/settings "$work/settings.json" 200 "$work/settings-response.json"
 jq -e '
   .llm_api_key_is_set == true and
