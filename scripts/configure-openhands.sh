@@ -23,6 +23,7 @@ agent_uid="$(id -u "$agent_user")"
 openhands_env="$agent_home/.config/ai-platform/openhands.env"
 canvas_url="http://127.0.0.1:18002"
 litellm_url="http://127.0.0.1:14000"
+litellm_openai_url="$litellm_url/v1"
 
 for required in curl docker jq runuser sed mktemp; do
   command -v "$required" >/dev/null 2>&1 || {
@@ -118,25 +119,32 @@ jq -e '.agent_settings.agent_kind == "openhands"' \
   }
 
 jq -n \
-  --arg api_key "$litellm_key" \
-  --arg base_url "$litellm_url" \
+  --arg base_url "$litellm_openai_url" \
   '{
     agent_settings_diff: {
       llm: {
-        model: "litellm_proxy/local-code",
-        api_key: $api_key,
+        model: "openai/local-code",
         base_url: $base_url
       }
     }
-  }' >"$work/settings.json"
+  }' >"$work/model-settings.json"
 
-echo "Persisting encrypted local-code settings..."
-api_write PATCH /api/settings "$work/settings.json" 200 "$work/settings-response.json"
+echo "Persisting local-code model route..."
+api_write PATCH /api/settings "$work/model-settings.json" 200 \
+  "$work/model-settings-response.json"
+
+jq -n \
+  --arg api_key "$litellm_key" \
+  '{agent_settings_diff: {llm: {api_key: $api_key}}}' \
+  >"$work/key-settings.json"
+echo "Persisting encrypted local-code credential..."
+api_write PATCH /api/settings "$work/key-settings.json" 200 \
+  "$work/settings-response.json"
 jq -e '
   .llm_api_key_is_set == true and
   .agent_settings.agent_kind == "openhands" and
-  .agent_settings.llm.model == "litellm_proxy/local-code" and
-  .agent_settings.llm.base_url == "http://127.0.0.1:14000"
+  .agent_settings.llm.model == "openai/local-code" and
+  .agent_settings.llm.base_url == "http://127.0.0.1:14000/v1"
 ' "$work/settings-response.json" >/dev/null || {
   echo "OpenHands did not persist the expected encrypted LLM settings." >&2
   exit 1
@@ -173,6 +181,6 @@ jq -e '.choices[0].message.content | type == "string" and length > 0' \
     exit 1
   }
 
-echo "Stored encrypted OpenHands LLM settings: local-code"
+echo "Stored encrypted OpenHands LLM settings: openai/local-code"
 echo "Completion route verified through authenticated LiteLLM: local-code"
 echo "Rootless Docker access verified for: $agent_user"
