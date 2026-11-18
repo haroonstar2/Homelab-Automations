@@ -104,11 +104,19 @@ security is effective. Before its first start:
 Do not start Switch merely to see whether the configuration works. First-start
 identity choices are persistent.
 
-Install exactly `@opencode/cli@2.2.7` for `local-coder`, copy
-`config/opencode/opencode.jsonc` to the dedicated agent identity, and expose the
-master key as `LITELLM_API_KEY` from a mode-0600 environment file. OpenCode's
+Install the checksum-verified OpenCode 2.2.7 standalone Linux release for the
+dedicated agent identity with:
+
+```bash
+sudo scripts/install-opencode-agent.sh --apply --env-file .env
+sudo scripts/run-model-qualification.sh --apply
+```
+
+The installer copies `config/opencode/opencode.jsonc` and writes
+`LITELLM_API_KEY` to a mode-0600 agent-only environment file. OpenCode's
 documented custom-provider runtime sends `local-code` and `local-fast` to the
-loopback-only LiteLLM listener.
+loopback-only LiteLLM listener. The qualification wrapper runs as `ai-agent`
+and retains its evidence under the dedicated qualification workspace.
 
 ## Primary sources
 
