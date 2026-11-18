@@ -108,7 +108,7 @@ diff. This
 intentionally avoids Agent Server 1.62's profile persistence paths, which
 return HTTP 500 with an encrypted provider reference or a plaintext draft key
 when `OH_SECRET_KEY` is enabled.
-The saved SDK model identifier is `openai/local-code` and its OpenAI-compatible
+The saved SDK model identifier is `litellm_proxy/local-code` and its compatible
 base URL is `http://127.0.0.1:14000/v1`; LiteLLM still routes the public model
 alias `local-code` to Ollama. The command writes the credential, base URL, and
 model in that order so every intermediate persisted LLM remains valid.

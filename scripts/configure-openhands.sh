@@ -134,15 +134,15 @@ echo "Persisting LiteLLM OpenAI-compatible base URL..."
 api_write PATCH /api/settings "$work/base-url-settings.json" 200 \
   "$work/base-url-settings-response.json"
 
-jq -n '{agent_settings_diff: {llm: {model: "openai/local-code"}}}' \
+jq -n '{agent_settings_diff: {llm: {model: "litellm_proxy/local-code"}}}' \
   >"$work/model-settings.json"
-echo "Persisting openai/local-code model alias..."
+echo "Persisting litellm_proxy/local-code model alias..."
 api_write PATCH /api/settings "$work/model-settings.json" 200 \
   "$work/settings-response.json"
 jq -e '
   .llm_api_key_is_set == true and
   .agent_settings.agent_kind == "openhands" and
-  .agent_settings.llm.model == "openai/local-code" and
+  .agent_settings.llm.model == "litellm_proxy/local-code" and
   .agent_settings.llm.base_url == "http://127.0.0.1:14000/v1"
 ' "$work/settings-response.json" >/dev/null || {
   echo "OpenHands did not persist the expected encrypted LLM settings." >&2
@@ -180,6 +180,6 @@ jq -e '.choices[0].message.content | type == "string" and length > 0' \
     exit 1
   }
 
-echo "Stored encrypted OpenHands LLM settings: openai/local-code"
+echo "Stored encrypted OpenHands LLM settings: litellm_proxy/local-code"
 echo "Completion route verified through authenticated LiteLLM: local-code"
 echo "Rootless Docker access verified for: $agent_user"
