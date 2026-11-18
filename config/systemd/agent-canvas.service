@@ -12,7 +12,7 @@ Environment=OH_CANVAS_SAFE_BACKEND_PORT=18100
 Environment=OH_CANVAS_SAFE_AUTOMATION_PORT=18101
 EnvironmentFile=%h/.config/ai-platform/openhands.env
 WorkingDirectory=/mnt/Storage1/ai-platform/workspaces/openhands
-ExecStart=%h/.local/bin/agent-canvas --public --port 18002
+ExecStart=%h/.local/bin/agent-canvas --public --host 127.0.0.1 --port 18002
 Restart=on-failure
 RestartSec=5
 UMask=0077

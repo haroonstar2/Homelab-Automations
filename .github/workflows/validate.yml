@@ -48,6 +48,8 @@ jobs:
           python3 -m unittest discover -s tests/model-qualification -p 'test_*.py'
           python3 -m json.tool renovate.json >/dev/null
           python3 -m json.tool config/opencode/opencode.jsonc >/dev/null
+          grep -Fqx 'ExecStart=%h/.local/bin/agent-canvas --public --host 127.0.0.1 --port 18002' \
+            config/systemd/agent-canvas.service
 
       - name: Scan for secrets
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0

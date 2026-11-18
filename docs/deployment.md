@@ -81,7 +81,7 @@ Agent Canvas running under the dedicated `ai-agent` identity with:
 export DOCKER_HOST=unix:///run/user/$(id -u)/docker.sock
 export OH_CONVERSATION_RUNTIME=docker
 export LOCAL_BACKEND_API_KEY='from a mode-0600 environment file'
-agent-canvas --public
+agent-canvas --public --host 127.0.0.1
 ```
 
 Install the pinned Node.js 24.22.3, uv 0.13.9, and
@@ -91,7 +91,8 @@ Install the pinned Node.js 24.22.3, uv 0.13.9, and
 sudo scripts/install-openhands-runtime.sh --apply
 ```
 
-The service listens only on host loopback port `18002`; its internal Agent
+Public mode keeps backend-key authentication enabled, while the explicit host
+argument restricts the service to loopback port `18002`. Its internal Agent
 Server and automation processes use loopback ports `18100` and `18101` to avoid
 the Caddy listeners. It requires its generated agent-only backend key, disables telemetry, and uses
 `OH_CONVERSATION_RUNTIME=docker` with the `ai-agent` rootless Docker socket.
