@@ -1,6 +1,6 @@
 # Haroon's Homelab (`10.0.0.118` & `10.0.0.117`)
 
-This repository contains the Docker Compose stacks, n8n workflows, and configuration for the two-node homelab setup.
+This repository contains the Docker Compose stacks, the **devbot** Discord assistant, and configuration for the two-node homelab setup.
 
 ---
 
@@ -10,11 +10,11 @@ This repository contains the Docker Compose stacks, n8n workflows, and configura
 
 | Service | Local URL / Connection | `.home` DNS URL | Purpose |
 | :--- | :--- | :--- | :--- |
+| **devbot** | Discord | — | Developer assistant: `/ask`, `/log`, `/status` (more in later phases) |
+| **LiteLLM** | internal `http://litellm:4000` | — | Model-alias proxy (`smart` / `fast` / `embed`) in front of Ollama |
 | **Open WebUI** | `http://10.0.0.118:3000` | `http://ai.home:3000` | Local ChatGPT UI + Master's Course PDF RAG Knowledge Base |
-| **n8n** | `http://10.0.0.118:5678` | `http://n8n.home:5678` | Visual AI workflows (Job Radar, ArXiv Digest, Tech News, Research Agent) |
 | **SearXNG** | `http://10.0.0.118:8088` | `http://server.home:8088` | Private metasearch engine + JSON search API (`/search?q=...&format=json`) for coding agents |
-| **Ollama API** | `http://10.0.0.118:11434` | `http://ollama.home:11434` | Local LLM (`qwen2.5:3b`) & embedding server (`nomic-embed-text`) |
-| **Windmill** | `http://10.0.0.118:8100` | `http://windmill.home:8100` | 24/7 developer task runner for Python/TS/Bash scripts & cron jobs |
+| **Ollama API** | `http://10.0.0.118:11434` | `http://ollama.home:11434` | Local CPU LLMs (`qwen3-coder:30b`, `qwen3:4b`) & embeddings (`nomic-embed-text`) |
 | **Code-Server** | `http://10.0.0.118:8443` | `http://code.home:8443` | Browser-based VS Code IDE with `/mnt/Storage1/data` mounted |
 | **SaaS Postgres (`pgvector`)** | `postgresql://saas:saas_dev_pass@10.0.0.118:5432/saas_dev` | `server.home:5432` | Dedicated PostgreSQL 16 + `pgvector` database for SaaS projects |
 | **SaaS Redis** | `redis://10.0.0.118:6379` | `server.home:6379` | Dedicated Redis 7 server for SaaS queues, caching & rate-limiting |
@@ -26,12 +26,41 @@ This repository contains the Docker Compose stacks, n8n workflows, and configura
 
 ---
 
-## 2. Pre-Built n8n Workflows (`server-10.0.0.118/workflows/`)
-All 4 workflows are pre-imported into n8n (`http://10.0.0.118:5678`) and wired to your Discord Webhook:
-1. **[1. Daily AI Tech & News Digest -> Discord](server-10.0.0.118/workflows/daily-ai-tech-digest.json)**: Summarizes top Hacker News stories every morning at 8 AM.
-2. **[2. Private Web Research AI Agent (SearXNG + Ollama) -> Discord](server-10.0.0.118/workflows/private-web-research-agent.json)**: Searches the live web via SearXNG on any topic and synthesizes a cited report.
-3. **[3. SWE & AI Job Hunt Radar -> Discord](server-10.0.0.118/workflows/job-hunt-radar.json)**: Scans tech/YC job feeds twice daily (10 AM & 4 PM), filters for SWE/AI/Full-Stack roles using Ollama, and sends direct apply links to Discord.
-4. **[4. Master's CS & AI ArXiv Paper Digest -> Discord](server-10.0.0.118/workflows/arxiv-paper-digest.json)**: Summarizes the top 4 new ArXiv papers in `cs.AI`, `cs.LG`, and `cs.SE` on weekdays at 9 AM.
+## 2. devbot: Discord Developer Assistant (`server-10.0.0.118/devbot/`)
+Runs entirely on `10.0.0.118` with local models and no API costs. Nothing is ever added to project repos.
+
+| Command | What it does |
+| :--- | :--- |
+| `/note <topic> [project]` | Opens a thread for raw tech notes/links/snippets; click **Synthesize & Save to Notion** (or `/note_save`) to format and upload to Notion (`Type = Tech`). |
+| `/conventions <project> <rules> [repo_url]` | Saves per-project coding rules in Notion's **Projects** database (automatically pulled by `/ask` and `/code`). |
+| `/ask <question> [project]` | Opens a thread for architecture / implementation Q&A. Follow up, paste docs, or attach text/source files in the thread. |
+| `/doc <name> [question] [file] [text]` | Chunks & embeds documentation into `pgvector` (`nomic-embed-text`) and opens a grounded Q&A thread citing `[chunk N]`. |
+| `/docs` | Lists all documentation sets indexed in `pgvector`. |
+| `/code <repo> <task>` | Clones `<repo>`, drafts an implementation plan, waits for your ✅ approval in Discord, runs Aider on `agent/<slug>`, verifies syntax, pushes the branch, and opens a Draft PR. |
+| `/review <pr>` | Fetches any GitHub PR diff (`url` or `repo#12`) and posts a senior-engineer code review in a Discord thread. |
+| `/checkin` / `/wrapup` / `/retro` | Triggers the 8:00 AM Git-aware check-in, 6:00 PM wrap-up, or Sunday 6:00 PM weekly retro on demand. |
+| `/resume [repo]` | Shows where you left off: last handoff, latest plan, blockers, recent GitHub commits, open PRs, and active `agent/*` branches. |
+| `/research <query>` | Searches the web via SearXNG, synthesizes fixes/sources, and saves a `Research` note in Notion. |
+| `/log <text>` | Appends a progress entry to Postgres, local archive, and today's Notion Journal page. |
+| `/status` | Health check for LiteLLM, Postgres (`pgvector`), Notion, GitHub, and SearXNG. |
+
+Only the user in `DISCORD_OWNER_ID` can use it. Replies are slow by design (CPU inference): expect minutes, not seconds.
+
+### First-time setup
+1. **Discord bot**: at https://discord.com/developers/applications, create an app, then under **Bot** copy the token and enable **Message Content Intent**. Invite it with OAuth2 URL Generator scopes `bot` + `applications.commands` and permissions *Send Messages, Send Messages in Threads, Create Public Threads, Read Message History, Embed Links, Attach Files*.
+2. **Env file** (on the server, in `~/homelab-stack/`): `cp .env.example .env` and fill in the Discord IDs and a random `LITELLM_MASTER_KEY`.
+3. **Data dir**: `sudo mkdir -p /mnt/Storage1/devbot && sudo chown 1000:1000 /mnt/Storage1/devbot`
+4. **Remove retired containers and pull models**:
+   ```bash
+   docker compose up -d --remove-orphans ollama        # applies new Ollama settings, removes n8n/windmill/sandbox
+   docker exec ollama ollama pull qwen3-coder:30b
+   docker exec ollama ollama pull qwen3:4b
+   docker exec ollama ollama pull nomic-embed-text
+   ```
+5. **Evaluate models**: use `python3 devbot/scripts/benchmark_models.py` for throughput, then run
+   `python3 devbot/scripts/evaluate_code_models.py smart` through LiteLLM for repository-edit correctness.
+   Only select a model after its acceptance cases pass; then edit `litellm/config.yaml` if needed.
+6. **Start**: `docker compose up -d --build litellm devbot && docker logs -f devbot`. Then run `/status` in Discord.
 
 ---
 

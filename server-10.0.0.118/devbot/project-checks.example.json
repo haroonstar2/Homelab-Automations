@@ -1,0 +1,12 @@
+{
+  "owner/python-project": {
+    "checks": [
+      {
+        "argv": ["python", "-m", "unittest", "discover", "-s", "tests", "-v"],
+        "cwd": ".",
+        "timeout": 300,
+        "env": {"APP_ENV": "test"}
+      }
+    ]
+  }
+}

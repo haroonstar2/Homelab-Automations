@@ -1,0 +1,55 @@
+{
+  "haroonstar2/chessclone": {
+    "checks": [
+      {
+        "argv": ["npm", "ci", "--prefer-offline", "--no-audit"],
+        "component": "dependencies",
+        "cwd": ".",
+        "timeout": 900,
+        "env": {"HOME": "/home/devbot"}
+      },
+      {
+        "argv": ["npm", "run", "prisma:generate", "--workspace", "core-api"],
+        "component": "core-api prisma",
+        "cwd": ".",
+        "timeout": 300,
+        "env": {
+          "HOME": "/home/devbot",
+          "DATABASE_URL": "postgresql://unused:unused@localhost:5432/unused"
+        }
+      },
+      {
+        "argv": ["npm", "run", "build", "--workspace", "core-api"],
+        "component": "core-api build",
+        "cwd": ".",
+        "timeout": 900,
+        "env": {"HOME": "/home/devbot"}
+      },
+      {
+        "argv": ["npm", "test", "--workspace", "core-api", "--", "--runInBand"],
+        "component": "core-api tests",
+        "cwd": ".",
+        "timeout": 600,
+        "env": {"HOME": "/home/devbot"}
+      },
+      {
+        "argv": ["npm", "run", "build", "--workspace", "web-client"],
+        "component": "web-client build",
+        "cwd": ".",
+        "timeout": 900,
+        "env": {"HOME": "/home/devbot"}
+      },
+      {
+        "argv": ["go", "test", "./..."],
+        "component": "game-server tests",
+        "cwd": "apps/game-server",
+        "timeout": 900,
+        "env": {
+          "HOME": "/home/devbot",
+          "REDIS_HOST": "saas-redis",
+          "REDIS_PORT": "6379"
+        }
+      }
+    ]
+  }
+}

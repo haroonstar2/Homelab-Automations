@@ -1,0 +1,6 @@
+discord.py==2.7.1
+openai==2.20.0
+asyncpg==0.32.0
+httpx==0.28.1
+aider-chat==0.86.2
+tzdata==2025.3

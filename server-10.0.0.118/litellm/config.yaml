@@ -1,0 +1,39 @@
+# LiteLLM proxy: devbot only ever asks for these aliases, never a concrete model.
+# Swap models here (then `docker compose restart litellm`) without touching devbot.
+#
+# Pull the models on the server first:
+#   docker exec ollama ollama pull qwen3-coder:30b
+#   docker exec ollama ollama pull qwen3:4b
+#   docker exec ollama ollama pull nomic-embed-text
+#
+# Pick `smart` based on devbot/scripts/benchmark_models.py results.
+# Fallbacks if 30b is too slow: qwen2.5-coder:14b, qwen2.5-coder:7b
+
+model_list:
+  - model_name: smart            # /ask, /code, /review
+    litellm_params:
+      model: ollama_chat/qwen3-coder:30b
+      api_base: http://ollama:11434
+      timeout: 1800              # CPU prompt processing can take minutes
+
+  - model_name: fast             # check-ins, summaries, classification
+    litellm_params:
+      model: ollama_chat/qwen3:4b
+      api_base: http://ollama:11434
+      timeout: 600
+
+  - model_name: embed            # /doc retrieval (Phase 2)
+    litellm_params:
+      model: ollama/nomic-embed-text
+      api_base: http://ollama:11434
+
+  # --- Optional free cloud fallback: OFF. Uncomment only if you opt in. ---
+  # Free tiers are rate-limited and may use prompts for training.
+  # - model_name: smart-cloud
+  #   litellm_params:
+  #     model: gemini/gemini-2.5-flash
+  #     api_key: os.environ/GEMINI_API_KEY
+
+litellm_settings:
+  drop_params: true
+  request_timeout: 1800

@@ -5,11 +5,6 @@
         href: http://10.0.0.118:3000
         description: ChatGPT-style UI & Course PDF Knowledge Base (ai.home:3000)
         siteMonitor: http://10.0.0.118:3000
-    - n8n Workflow Automation:
-        icon: n8n.png
-        href: http://10.0.0.118:5678
-        description: Job Radar, ArXiv Digest, Tech News & Research Agents (n8n.home:5678)
-        siteMonitor: http://10.0.0.118:5678
     - SearXNG Private Search:
         icon: searxng.png
         href: http://10.0.0.118:8088
@@ -21,12 +16,7 @@
         description: Local LLM & Embeddings API endpoint (ollama.home:11434)
         siteMonitor: http://10.0.0.118:11434
 
-- SaaS Dev & Task Runner (10.0.0.118):
-    - Windmill Task Runner:
-        icon: windmill.png
-        href: http://10.0.0.118:8100
-        description: Run Python/TS/Bash scripts, cron schedules & UIs (windmill.home:8100)
-        siteMonitor: http://10.0.0.118:8100
+- SaaS Dev (10.0.0.118):
     - Code-Server (VS Code):
         icon: vscode.png
         href: http://10.0.0.118:8443
