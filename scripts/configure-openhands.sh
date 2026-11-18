@@ -101,6 +101,37 @@ jq -e '.data[] | select(.id == "local-code")' "$work/models.json" >/dev/null || 
   exit 1
 }
 
+jq -n '{agent_settings_diff: {agent_context: {}}}' \
+  >"$work/context-migration.json"
+api_write PATCH /api/settings "$work/context-migration.json" 200 \
+  "$work/context-migration-response.json"
+
+jq -n \
+  --arg api_key "$litellm_key" \
+  --arg base_url "$litellm_url" \
+  '{
+    agent_settings_diff: {
+      agent_kind: "openhands",
+      agent_context: {},
+      llm: {
+        model: "litellm_proxy/local-code",
+        api_key: $api_key,
+        base_url: $base_url
+      }
+    }
+  }' >"$work/settings.json"
+
+api_write PATCH /api/settings "$work/settings.json" 200 "$work/settings-response.json"
+jq -e '
+  .llm_api_key_is_set == true and
+  .agent_settings.agent_kind == "openhands" and
+  .agent_settings.llm.model == "litellm_proxy/local-code" and
+  .agent_settings.llm.base_url == "http://127.0.0.1:14000"
+' "$work/settings-response.json" >/dev/null || {
+  echo "OpenHands did not persist the expected encrypted LLM settings." >&2
+  exit 1
+}
+
 jq -n '{
   model: "local-code",
   messages: [
@@ -131,29 +162,6 @@ jq -e '.choices[0].message.content | type == "string" and length > 0' \
     echo "LiteLLM completion preflight returned no assistant content." >&2
     exit 1
   }
-
-jq -n \
-  --arg api_key "$litellm_key" \
-  --arg base_url "$litellm_url" \
-  '{
-    agent_settings_diff: {
-      llm: {
-        model: "litellm_proxy/local-code",
-        api_key: $api_key,
-        base_url: $base_url
-      }
-    }
-  }' >"$work/settings.json"
-
-api_write PATCH /api/settings "$work/settings.json" 200 "$work/settings-response.json"
-jq -e '
-  .llm_api_key_is_set == true and
-  .agent_settings.llm.model == "litellm_proxy/local-code" and
-  .agent_settings.llm.base_url == "http://127.0.0.1:14000"
-' "$work/settings-response.json" >/dev/null || {
-  echo "OpenHands did not persist the expected encrypted LLM settings." >&2
-  exit 1
-}
 
 echo "Stored encrypted OpenHands LLM settings: local-code"
 echo "Completion route verified through authenticated LiteLLM: local-code"

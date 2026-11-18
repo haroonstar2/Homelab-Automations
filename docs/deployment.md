@@ -101,7 +101,9 @@ The configuration command first verifies that `ai-agent` can access its own
 rootless Docker daemon. It performs an authenticated completion through the
 `local-code` proxy route, then uses Agent Server's settings API to encrypt and
 persist only its required model, key, and base URL without printing either API
-key. This
+key. Agent Canvas initially persists ACP settings with `agent_context: null`,
+so the command first migrates that field to an object and explicitly switches
+the discriminator to the standard `openhands` agent variant. This
 intentionally avoids Agent Server 1.62's profile persistence paths, which
 return HTTP 500 with an encrypted provider reference or a plaintext draft key
 when `OH_SECRET_KEY` is enabled.
