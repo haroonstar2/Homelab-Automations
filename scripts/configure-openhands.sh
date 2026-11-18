@@ -19,13 +19,14 @@ fi
 env_file="$3"
 agent_user="ai-agent"
 agent_home="$(getent passwd "$agent_user" | cut -d: -f6)"
+agent_uid="$(id -u "$agent_user")"
 openhands_env="$agent_home/.config/ai-platform/openhands.env"
 canvas_url="http://127.0.0.1:18002"
 litellm_url="http://127.0.0.1:14000"
 provider_name="Local LiteLLM"
 profile_name="local-code"
 
-for required in curl jq sed mktemp; do
+for required in curl docker jq runuser sed mktemp; do
   command -v "$required" >/dev/null 2>&1 || {
     echo "Required command is missing: $required" >&2
     exit 1
@@ -95,6 +96,14 @@ api_write() {
 }
 
 curl --fail --silent --show-error "$canvas_url/ready" >/dev/null
+runuser -u "$agent_user" -- env \
+  HOME="$agent_home" \
+  XDG_RUNTIME_DIR="/run/user/$agent_uid" \
+  DOCKER_HOST="unix:///run/user/$agent_uid/docker.sock" \
+  docker info >/dev/null || {
+    echo "The ai-agent identity cannot access its rootless Docker daemon." >&2
+    exit 1
+  }
 curl --fail --silent --show-error \
   -H "Authorization: Bearer $litellm_key" \
   "$litellm_url/v1/models" >"$work/models.json"
@@ -147,11 +156,31 @@ jq -n \
     include_secrets: false
   }' >"$work/profile.json"
 
+jq -n \
+  --arg api_key "$litellm_key" \
+  --arg base_url "$litellm_url" \
+  '{
+    llm: {
+      model: "litellm_proxy/local-code",
+      api_key: $api_key,
+      base_url: $base_url,
+      auth_type: "api_key",
+      usage_id: "openhands-local-code-preflight",
+      api_mode: "chat",
+      timeout: 1200,
+      stream_idle_timeout: 1200,
+      drop_params: true,
+      native_tool_calling: true,
+      log_completions: false
+    }
+  }' >"$work/preflight-profile.json"
+
 api_write POST "/api/profiles/$profile_name/validate" \
-  "$work/profile.json" 200 "$work/validate-response.json"
+  "$work/preflight-profile.json" 200 "$work/validate-response.json"
 jq -e '.valid == true' "$work/validate-response.json" >/dev/null || {
   echo "OpenHands rejected the local-code profile during validation." >&2
-  jq -r '.message // .error // "No diagnostic message"' "$work/validate-response.json" >&2
+  jq -r '.error.message // .message // "No diagnostic message"' \
+    "$work/validate-response.json" >&2
   exit 1
 }
 
