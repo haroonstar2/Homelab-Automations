@@ -1,0 +1,61 @@
+name: Validate platform configuration
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Create validation environment
+        shell: bash
+        run: |
+          cp .env.example .env.validation
+          sed -i 's/^LITELLM_MASTER_KEY=$/LITELLM_MASTER_KEY=dummy/' .env.validation
+          sed -i 's/^WEBUI_SECRET_KEY=$/WEBUI_SECRET_KEY=dummy/' .env.validation
+          sed -i 's/^SEARXNG_SECRET=$/SEARXNG_SECRET=dummy/' .env.validation
+          sed -i 's/^LOCAL_BACKEND_API_KEY=$/LOCAL_BACKEND_API_KEY=dummy/' .env.validation
+          sed -i 's/^SWITCH_SERVER_NAME=$/SWITCH_SERVER_NAME=switch-test.invalid/' .env.validation
+          sed -i 's/^SWITCH_DB_PASSWORD=$/SWITCH_DB_PASSWORD=dummy/' .env.validation
+          sed -i 's/^SWITCH_DB_OWNER_PASSWORD=$/SWITCH_DB_OWNER_PASSWORD=dummy/' .env.validation
+          sed -i 's/^SWITCH_AGENT_REGISTRATION_TOKEN=$/SWITCH_AGENT_REGISTRATION_TOKEN=dummy/' .env.validation
+          sed -i 's/^SWITCH_SECRET_KEYS=$/SWITCH_SECRET_KEYS=key:dummysecretvalue012345678901234567890/' .env.validation
+          sed -i 's/^SWITCH_CONTROLLER_TOKEN_SECRET=$/SWITCH_CONTROLLER_TOKEN_SECRET=dummysecretvalue012345678901234567890/' .env.validation
+          sed -i 's/^SWITCH_ADMIN_EMAIL=$/SWITCH_ADMIN_EMAIL=admin@example.invalid/' .env.validation
+          sed -i 's/^SWITCH_ADMIN_PASSWORD=$/SWITCH_ADMIN_PASSWORD=dummy/' .env.validation
+          sed -i 's|^SWITCH_FRONTEND_BASE_URL=$|SWITCH_FRONTEND_BASE_URL=https://switch.invalid/|' .env.validation
+          sed -i 's|^SWITCH_GATEWAY_PUBLIC_URL=$|SWITCH_GATEWAY_PUBLIC_URL=https://switch.invalid/|' .env.validation
+
+      - name: Validate Compose and shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in compose/core.yml compose/switch.yml compose/openhands.yml compose/automation.yml; do
+            docker compose --env-file .env.validation -f "$file" config --quiet
+          done
+          find scripts tests -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          python3 -m py_compile tests/model-qualification/qualify.py
+          python3 -m json.tool renovate.json >/dev/null
+          python3 -m json.tool config/opencode/opencode.jsonc >/dev/null
+
+      - name: Scan for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan configuration
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+

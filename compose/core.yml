@@ -1,0 +1,166 @@
+name: ai-platform-core
+
+services:
+  ollama:
+    image: ollama/ollama:${OLLAMA_VERSION:?set OLLAMA_VERSION}@sha256:910d0d8107b538fb0894e63163eb195de0cc7aefcbc666dc62d3b18f71124592
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_CONTEXT_LENGTH: "16384"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_QUEUE: "32"
+      OLLAMA_KEEP_ALIVE: 30m
+      OLLAMA_NO_CLOUD: "1"
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - /mnt/Storage1/data/ollama:/root/.ollama
+    expose:
+      - "11434"
+    networks:
+      - model
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  litellm:
+    image: ghcr.io/berriai/litellm:v${LITELLM_VERSION:?set LITELLM_VERSION}@sha256:95253c31752cc3efc6c60f7e1a0ec064ede73ba48c19cc466a8af71e7fec48a7
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      FRONTIER_CODE_MODEL: ${FRONTIER_CODE_MODEL:-}
+    volumes:
+      - ../config/litellm/config.yaml:/app/config.yaml:ro
+    expose:
+      - "4000"
+    ports:
+      - 127.0.0.1:14000:4000
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - model
+      - app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:v${OPEN_WEBUI_VERSION:?set OPEN_WEBUI_VERSION}@sha256:d5168bfbc28609eff5bea1b438dd864cf64d185cf6582c02244865e18385b901
+    restart: unless-stopped
+    environment:
+      OPENAI_API_BASE_URL: http://litellm:4000/v1
+      OPENAI_API_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY}
+      ENABLE_OLLAMA_API: "false"
+      WEBUI_AUTH: "true"
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY}
+      ENABLE_SIGNUP: "false"
+      ENABLE_WEB_SEARCH: "true"
+      WEB_SEARCH_ENGINE: searxng
+      WEB_SEARCH_RESULT_COUNT: "3"
+      SEARXNG_QUERY_URL: http://searxng:8080/search?q=<query>&format=json
+    volumes:
+      - ${AI_PLATFORM_ROOT:?set AI_PLATFORM_ROOT}/open-webui:/app/backend/data
+    expose:
+      - "8080"
+    depends_on:
+      litellm:
+        condition: service_healthy
+      searxng:
+        condition: service_healthy
+    networks:
+      - app
+      - search
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+  searxng:
+    image: ghcr.io/searxng/searxng:${SEARXNG_VERSION:?set SEARXNG_VERSION}@sha256:82b222dd1854c43241874874fbc985006556230804dc819ef2a639eeb574d0e2
+    restart: unless-stopped
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?set SEARXNG_SECRET}
+    volumes:
+      - ../config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+      - ${AI_PLATFORM_ROOT:?set AI_PLATFORM_ROOT}/searxng-cache:/var/cache/searxng
+    expose:
+      - "8080"
+    networks:
+      - search
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    logging: *logging
+
+  caddy:
+    image: caddy:${CADDY_VERSION:?set CADDY_VERSION}@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:18080:8080
+      - 127.0.0.1:18000:8000
+      - 127.0.0.1:18001:8001
+    volumes:
+      - ../config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${AI_PLATFORM_ROOT:?set AI_PLATFORM_ROOT}/caddy/data:/data
+      - ${AI_PLATFORM_ROOT:?set AI_PLATFORM_ROOT}/caddy/config:/config
+    networks:
+      - app
+      - switch_frontend
+      - openhands_frontend
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    logging: *logging
+
+networks:
+  model:
+    internal: true
+  search:
+    internal: true
+  app:
+    internal: true
+  switch_frontend:
+    name: ai-platform-switch-frontend
+  openhands_frontend:
+    name: ai-platform-openhands-frontend
+

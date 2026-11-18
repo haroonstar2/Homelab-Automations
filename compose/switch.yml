@@ -1,0 +1,114 @@
+name: ai-platform-switch
+
+# Localized from Switch's released standalone Compose contract at
+# switch-v0.32.1. The upstream contract remains authoritative; see
+# docs/deployment.md before upgrading this file.
+services:
+  postgres:
+    image: postgres:16-alpine@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${SWITCH_DB_OWNER_USER:?set SWITCH_DB_OWNER_USER}
+      POSTGRES_PASSWORD: ${SWITCH_DB_OWNER_PASSWORD:?set SWITCH_DB_OWNER_PASSWORD}
+      POSTGRES_DB: ${SWITCH_DB_NAME:?set SWITCH_DB_NAME}
+    volumes:
+      - ${AI_PLATFORM_ROOT:?set AI_PLATFORM_ROOT}/switch/postgres:/var/lib/postgresql/data
+    networks:
+      - switch_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SWITCH_DB_OWNER_USER} -d ${SWITCH_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  init-db:
+    image: postgres:16-alpine@sha256:81e77a4833487b8132fe4b00bedd39dc3f74b8641e387f19312a48f7de218c2e
+    restart: "no"
+    environment:
+      PGPASSWORD: ${SWITCH_DB_OWNER_PASSWORD:?set SWITCH_DB_OWNER_PASSWORD}
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        until psql -h postgres -U "${SWITCH_DB_OWNER_USER}" -d postgres -c 'SELECT 1' >/dev/null 2>&1; do sleep 1; done
+        if ! psql -h postgres -U "${SWITCH_DB_OWNER_USER}" -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='${SWITCH_DB_USER}'" | grep -q 1; then
+          psql -h postgres -U "${SWITCH_DB_OWNER_USER}" -d postgres -v ON_ERROR_STOP=1 -v app_user="${SWITCH_DB_USER}" -v app_password="${SWITCH_DB_PASSWORD}" <<'SQL'
+        SELECT format('CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS', :'app_user', :'app_password') \gexec
+        SQL
+        fi
+        psql -h postgres -U "${SWITCH_DB_OWNER_USER}" -d postgres -v ON_ERROR_STOP=1 -v app_user="${SWITCH_DB_USER}" -v app_password="${SWITCH_DB_PASSWORD}" <<'SQL'
+        SELECT format('ALTER ROLE %I PASSWORD %L', :'app_user', :'app_password') \gexec
+        SQL
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - switch_db
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+  switch:
+    image: ghcr.io/sandbox-quantum/switch-core:${SWITCH_VERSION:?set SWITCH_VERSION}@sha256:ac0a1fee3f71c2ea7610f452deaf0e0c2296d5ba021991484b7e57d7c6f8baaa
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${SWITCH_DB_USER:?set SWITCH_DB_USER}
+      DB_PASSWORD: ${SWITCH_DB_PASSWORD:?set SWITCH_DB_PASSWORD}
+      DB_OWNER_USER: ${SWITCH_DB_OWNER_USER:?set SWITCH_DB_OWNER_USER}
+      DB_OWNER_PASSWORD: ${SWITCH_DB_OWNER_PASSWORD:?set SWITCH_DB_OWNER_PASSWORD}
+      DB_NAME: ${SWITCH_DB_NAME:?set SWITCH_DB_NAME}
+      ID_SERVER_NAME: ${SWITCH_SERVER_NAME:?choose permanent SWITCH_SERVER_NAME before first start}
+      MATRIX_SERVER_NAME: ${SWITCH_SERVER_NAME:?choose permanent SWITCH_SERVER_NAME before first start}
+      AGENT_REGISTRATION_TOKEN: ${SWITCH_AGENT_REGISTRATION_TOKEN:?set SWITCH_AGENT_REGISTRATION_TOKEN}
+      SECRET_KEYS: ${SWITCH_SECRET_KEYS:?set SWITCH_SECRET_KEYS}
+      CONTROLLER_TOKEN_SECRET: ${SWITCH_CONTROLLER_TOKEN_SECRET:?set SWITCH_CONTROLLER_TOKEN_SECRET}
+      GATEWAY_ADMIN_EMAIL: ${SWITCH_ADMIN_EMAIL:?set SWITCH_ADMIN_EMAIL}
+      GATEWAY_ADMIN_PASSWORD: ${SWITCH_ADMIN_PASSWORD:?set SWITCH_ADMIN_PASSWORD}
+      FRONTEND_BASE_URL: ${SWITCH_FRONTEND_BASE_URL:?set SWITCH_FRONTEND_BASE_URL}
+      GATEWAY_PUBLIC_URL: ${SWITCH_GATEWAY_PUBLIC_URL:?set SWITCH_GATEWAY_PUBLIC_URL}
+      GATEWAY_COOKIE_SECURE: "true"
+      FEATURE_FLAGS_ENABLED: service_connections
+      TELEMETRY_ENABLED: "false"
+      THIRD_PARTY_AVATARS_ENABLED: "false"
+      DISCORD_APP_CLIENT_ID: ${SWITCH_DISCORD_CLIENT_ID:-}
+      DISCORD_APP_CLIENT_SECRET: ${SWITCH_DISCORD_CLIENT_SECRET:-}
+      DISCORD_APP_BOT_TOKEN: ${SWITCH_DISCORD_BOT_TOKEN:-}
+      DISCORD_APP_APPLICATION_ID: ${SWITCH_DISCORD_APPLICATION_ID:-}
+      DISCORD_APP_MESSAGE_CONTENT: "false"
+      DISCORD_APP_MEMBERS: "false"
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+    networks:
+      - switch_db
+      - switch_frontend
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    logging: *logging
+
+networks:
+  switch_db:
+    internal: true
+  switch_frontend:
+    external: true
+    name: ai-platform-switch-frontend
+

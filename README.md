@@ -1,5 +1,11 @@
 # Haroon's Homelab (`10.0.0.118` & `10.0.0.117`)
 
+> **Migration in progress:** the legacy devbot remains live for rollback. The
+> replacement platform design and verified phase status are in
+> [`AI_PLATFORM_REBUILD_PLAN.md`](AI_PLATFORM_REBUILD_PLAN.md) and
+> [`docs/migration.md`](docs/migration.md). Do not use the new Compose files for
+> cutover until every acceptance gate passes.
+
 This repository contains the Docker Compose stacks, the **devbot** Discord assistant, and configuration for the two-node homelab setup.
 
 ---

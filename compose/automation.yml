@@ -1,0 +1,30 @@
+name: ai-platform-automation
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSION:?set N8N_VERSION}@sha256:c0ea1246a81a34ce8e2b3cfb1f718b97de64b0a1b3747ad24d6d431826bb71ad
+    profiles: ["automation"]
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-America/Los_Angeles}
+      GENERIC_TIMEZONE: ${TZ:-America/Los_Angeles}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+      N8N_SECURE_COOKIE: "true"
+    volumes:
+      - ${AI_PLATFORM_ROOT:?set AI_PLATFORM_ROOT}/n8n:/home/node/.n8n
+    networks:
+      - automation
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  automation:
+    internal: true
+

@@ -1,0 +1,34 @@
+name: ai-platform-openhands
+
+# This is the official single-container Docker deployment shape from OpenHands
+# 1.41.0. It is limited to authentication/reverse-proxy validation and must not
+# be treated as the Phase 3 per-conversation isolation gate. The production
+# runtime is documented in docs/deployment.md and uses
+# OH_CONVERSATION_RUNTIME=docker with the dedicated rootless daemon.
+services:
+  openhands:
+    image: ghcr.io/openhands/agent-canvas:${OPENHANDS_VERSION:?set OPENHANDS_VERSION}@sha256:dcae97b63c9845fd1d4313857af6b10fb5888324a154238c4795ef86233d227c
+    profiles: ["single-sandbox"]
+    restart: unless-stopped
+    environment:
+      LOCAL_BACKEND_API_KEY: ${LOCAL_BACKEND_API_KEY:?set LOCAL_BACKEND_API_KEY}
+    volumes:
+      - ${AI_PLATFORM_ROOT:?set AI_PLATFORM_ROOT}/openhands/state:/home/openhands/.openhands
+      - ${OPENHANDS_PROJECTS_PATH:?set OPENHANDS_PROJECTS_PATH}:/projects
+    expose:
+      - "8000"
+    networks:
+      - openhands_frontend
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  openhands_frontend:
+    external: true
+    name: ai-platform-openhands-frontend
+

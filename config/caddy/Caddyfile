@@ -1,0 +1,19 @@
+{
+	admin off
+	log {
+		format json
+	}
+}
+
+:8080 {
+	reverse_proxy open-webui:8080
+}
+
+:8000 {
+	reverse_proxy switch:8000
+}
+
+:8001 {
+	reverse_proxy openhands:8000
+}
+

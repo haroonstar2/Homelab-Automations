@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" != "--apply" ]]; then
+  echo "Usage: sudo $0 --apply"
+  echo "Creates dedicated identities and /mnt/Storage1/ai-platform directories."
+  exit 2
+fi
+
+if [[ "${EUID}" -ne 0 ]]; then
+  echo "Run this script as root." >&2
+  exit 1
+fi
+
+service_user="ai-platform"
+agent_user="ai-agent"
+platform_root="/mnt/Storage1/ai-platform"
+
+for account in "$service_user" "$agent_user"; do
+  if ! id "$account" >/dev/null 2>&1; then
+    useradd --create-home --shell /bin/bash "$account"
+  fi
+done
+
+install -d -m 0750 -o "$service_user" -g "$service_user" \
+  "$platform_root" \
+  "$platform_root/caddy/data" \
+  "$platform_root/caddy/config" \
+  "$platform_root/open-webui" \
+  "$platform_root/searxng-cache" \
+  "$platform_root/switch" \
+  "$platform_root/switch/postgres" \
+  "$platform_root/openhands/state" \
+  "$platform_root/n8n" \
+  "$platform_root/backups"
+
+install -d -m 0750 -o "$agent_user" -g "$agent_user" \
+  "$platform_root/workspaces" \
+  "$platform_root/workspaces/openhands" \
+  "$platform_root/workspaces/switch"
+
+# The released OpenHands Docker image uses uid 10001. Grant only its explicit
+# state and project roots; never make either directory world-writable.
+if command -v setfacl >/dev/null 2>&1; then
+  setfacl -m u:10001:rwx "$platform_root/openhands/state" "$platform_root/workspaces/openhands"
+else
+  echo "setfacl is required for the documented OpenHands container uid 10001." >&2
+  exit 1
+fi
+
+loginctl enable-linger "$agent_user"
+
+if command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1; then
+  agent_uid="$(id -u "$agent_user")"
+  runuser -l "$agent_user" -c "XDG_RUNTIME_DIR=/run/user/$agent_uid dockerd-rootless-setuptool.sh install"
+else
+  echo "Rootless Docker helper is missing; install docker-ce-rootless-extras, then rerun." >&2
+  exit 1
+fi
+
+if id -nG "$agent_user" | tr ' ' '\n' | grep -qx docker; then
+  echo "$agent_user must not belong to the rootful docker group." >&2
+  exit 1
+fi
+
+echo "Bootstrap complete. Run tests/isolation/verify-rootless-boundary.sh next."
+

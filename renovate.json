@@ -1,0 +1,17 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "docker:pinDigests"],
+  "rangeStrategy": "pin",
+  "automerge": false,
+  "dependencyDashboard": true,
+  "labels": ["dependencies", "needs-validation"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "America/Los_Angeles",
+  "packageRules": [
+    {
+      "matchManagers": ["docker-compose", "github-actions"],
+      "minimumReleaseAge": "7 days"
+    }
+  ]
+}
+
