@@ -12,12 +12,14 @@ Environment=OH_CANVAS_SAFE_BACKEND_PORT=18100
 Environment=OH_CANVAS_SAFE_AUTOMATION_PORT=18101
 EnvironmentFile=%h/.config/ai-platform/openhands.env
 WorkingDirectory=/mnt/Storage1/ai-platform/workspaces/openhands
+ExecStartPre=/usr/bin/docker info
 ExecStart=%h/.local/bin/agent-canvas --public --host 127.0.0.1 --port 18002
 Restart=on-failure
 RestartSec=5
 UMask=0077
 NoNewPrivileges=true
-PrivateTmp=true
+# PrivateTmp on an unprivileged user service creates a mount/user namespace
+# that cannot connect to the rootless Docker socket in /run/user/%U.
 
 [Install]
 WantedBy=default.target
