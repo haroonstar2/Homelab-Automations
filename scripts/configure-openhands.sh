@@ -140,18 +140,9 @@ jq -n \
       llm: {
         model: "litellm_proxy/local-code",
         api_key: $api_key,
-        base_url: $base_url,
-        auth_type: "api_key",
-        usage_id: "openhands-local-code",
-        api_mode: "chat",
-        timeout: 1200,
-        stream_idle_timeout: 1200,
-        drop_params: true,
-        native_tool_calling: true,
-        log_completions: false
+        base_url: $base_url
       }
-    },
-    active_profile: null
+    }
   }' >"$work/settings.json"
 
 api_write PATCH /api/settings "$work/settings.json" 200 "$work/settings-response.json"
