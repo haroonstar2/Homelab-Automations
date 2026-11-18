@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS code_tasks (
     branch      TEXT NOT NULL,
     task        TEXT NOT NULL,
     plan        TEXT NOT NULL DEFAULT '',
-    status      TEXT NOT NULL DEFAULT 'planned',  -- 'planned', 'running', 'done', 'failed', 'cancelled'
+    status      TEXT NOT NULL DEFAULT 'planned',  -- 'planned', 'running', 'done', 'failed', 'pr_failed', 'cancelled'
     pr_url      TEXT NOT NULL DEFAULT '',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );

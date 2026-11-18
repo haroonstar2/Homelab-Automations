@@ -55,3 +55,30 @@ class ChangeContractTests(unittest.TestCase):
                 ChangeContract.create(self.repo, [path])
         with self.assertRaises(ValueError):
             ChangeContract.create(self.repo, ["required.ts"], ["other.ts"])
+
+    def test_explicit_nonempty_scope_is_required(self):
+        with self.assertRaisesRegex(ValueError, "explicit allowed file scope"):
+            ChangeContract.create(self.repo, ["service.py"])
+        with self.assertRaisesRegex(ValueError, "at least one path"):
+            ChangeContract.create(self.repo, (), [])
+
+    def test_protected_verification_tree_cannot_be_scoped_or_changed(self):
+        (self.repo / "tests").mkdir()
+        with self.assertRaisesRegex(ValueError, "Protected verification paths"):
+            ChangeContract.create(
+                self.repo, ["tests/test_service.py"], ["tests/test_service.py"], ["tests"],
+            )
+        contract = ChangeContract.create(
+            self.repo, ["service.py"], ["service.py"], ["tests", "pyproject.toml"],
+        )
+        result = contract.evaluate(["service.py", "tests/test_service.py"])
+        self.assertFalse(result.ok)
+        self.assertEqual(result.protected_paths_changed, ("tests/test_service.py",))
+        self.assertIn("protected verification paths changed", result.failure_message())
+
+    def test_legitimate_scoped_edit_passes_with_protected_inputs(self):
+        (self.repo / "service.py").write_text("VALUE = 1\n")
+        contract = ChangeContract.create(
+            self.repo, ["service.py"], ["service.py"], ["tests", "pyproject.toml"],
+        )
+        self.assertTrue(contract.evaluate(["service.py"]).ok)

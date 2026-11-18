@@ -3,8 +3,11 @@
 import json
 import os
 import time
+import re
 from dataclasses import dataclass
 from pathlib import Path
+
+from .workspace_paths import checked_path
 
 
 @dataclass(frozen=True)
@@ -32,9 +35,14 @@ class VerificationReport:
         return heading + failed["output"][-output_budget:]
 
 
-def load_checks(policy_file: Path, repo_full: str, repo_dir: Path) -> list[dict]:
+def load_policy(policy_file: Path, repo_full: str, repo_dir: Path) -> tuple[list[dict], tuple[str, ...]]:
     policy = json.loads(policy_file.read_text(encoding="utf-8"))
-    checks = policy.get(repo_full, {}).get("checks")
+    repo_policy = policy.get(repo_full, {})
+    checks = repo_policy.get("checks")
+    image = repo_policy.get("image")
+    immutable_image = r"(?:[^\s@]+@)?sha256:[0-9a-fA-F]{64}"
+    if not isinstance(image, str) or not re.fullmatch(immutable_image, image):
+        raise ValueError("Verification image must be a sha256 image ID or repository digest")
     if not isinstance(checks, list) or not checks:
         raise ValueError(f"No required checks configured for {repo_full}")
     result = []
@@ -63,9 +71,26 @@ def load_checks(policy_file: Path, repo_full: str, repo_dir: Path) -> list[dict]
             raise ValueError("Check component must be a nonempty string")
         result.append({
             "argv": argv, "cwd": cwd, "timeout": timeout, "env": clean_env,
-            "component": component.strip(),
+            "component": component.strip(), "image": image,
         })
-    return result
+    raw_protected = repo_policy.get("protected_paths", [])
+    if not isinstance(raw_protected, list) or not all(
+        isinstance(path, str) and path.strip() for path in raw_protected
+    ):
+        raise ValueError("protected_paths must be a list of nonempty repository-relative paths")
+    protected = tuple(dict.fromkeys(
+        checked_path(repo_dir, path.strip()).relative_to(repo_dir.resolve()).as_posix()
+        for path in raw_protected
+    ))
+    return result, protected
+
+
+def load_checks(policy_file: Path, repo_full: str, repo_dir: Path) -> list[dict]:
+    return load_policy(policy_file, repo_full, repo_dir)[0]
+
+
+def load_protected_paths(policy_file: Path, repo_full: str, repo_dir: Path) -> tuple[str, ...]:
+    return load_policy(policy_file, repo_full, repo_dir)[1]
 
 
 async def verify(policy_file: Path, repo_full: str, repo_dir: Path, run_cmd) -> VerificationReport:
@@ -84,7 +109,8 @@ async def verify(policy_file: Path, repo_full: str, repo_dir: Path, run_cmd) -> 
         started = time.monotonic()
         try:
             code, out = await run_cmd(
-                check["argv"], cwd=check["cwd"], timeout=check["timeout"], env=check["env"]
+                check["argv"], cwd=check["cwd"], timeout=check["timeout"],
+                env=check["env"], image=check["image"],
             )
         except OSError as exc:
             duration = round(time.monotonic() - started, 3)

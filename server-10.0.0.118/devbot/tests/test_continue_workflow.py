@@ -1,5 +1,6 @@
 import asyncio
 import tempfile
+import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,11 @@ class ContinueWorkflowTests(unittest.IsolatedAsyncioTestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         repo = Path(temporary.name)
+        checks_file = repo / "project-checks.json"
+        checks_file.write_text(json.dumps({
+            "owner/repo": {"image": "python@sha256:" + "a" * 64,
+                           "checks": [{"argv": ["true"]}], "protected_paths": []},
+        }))
         status_message = SimpleNamespace(edit=AsyncMock())
         thread = Mock(spec=discord.Thread)
         thread.id = 10
@@ -30,7 +36,10 @@ class ContinueWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 get_latest_code_subtask=AsyncMock(return_value=latest),
                 create_code_subtask=AsyncMock(), update_code_task_status=AsyncMock(),
             ),
-            runner=SimpleNamespace(prepare_existing_workspace=AsyncMock(return_value=(repo, "current tree"))),
+            runner=SimpleNamespace(
+                prepare_existing_workspace=AsyncMock(return_value=(repo, "current tree")),
+                checks_file=checks_file,
+            ),
             notion=SimpleNamespace(get_project_conventions=AsyncMock(return_value="project rules")),
             llm=SimpleNamespace(chat=AsyncMock(return_value="Fresh service-only plan")),
             lock_for=lambda _thread_id: asyncio.Lock(),

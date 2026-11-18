@@ -23,6 +23,7 @@ from ..prompts import CODE_PLAN_SYSTEM
 from ..runner import detect_stack_versions
 from ..task_memory import task_specification
 from ..textutil import split_message
+from ..verification import load_protected_paths
 from .ask import _short, TEXT_EXTENSIONS
 
 if TYPE_CHECKING:
@@ -143,6 +144,7 @@ class CodeCog(commands.Cog):
     @app_commands.describe(
         repo="GitHub repository ('RepoName' or 'owner/RepoName')",
         task="What to build or change (keep it focused and self-contained)",
+        required_paths="Comma-separated repository-relative paths the model may change",
         model="Model alias from litellm/config.yaml (default: smart)",
     )
     @app_commands.choices(
@@ -151,12 +153,21 @@ class CodeCog(commands.Cog):
             app_commands.Choice(name="fast (qwen3:4b - fits in RX 550)", value="fast"),
         ]
     )
-    async def code(self, interaction: discord.Interaction, repo: str, task: str, model: str = "smart") -> None:
+    async def code(
+        self, interaction: discord.Interaction, repo: str, task: str,
+        required_paths: str, model: str = "smart",
+    ) -> None:
         if not isinstance(interaction.channel, discord.TextChannel):
             await interaction.response.send_message("Use /code in a text channel.", ephemeral=True)
             return
         if not self.bot.github.enabled:
             await interaction.response.send_message("⚠️ `GITHUB_TOKEN` is not configured.", ephemeral=True)
+            return
+        paths = _explicit_paths(required_paths)
+        if not paths:
+            await interaction.response.send_message(
+                "`required_paths` must contain at least one repository-relative path.", ephemeral=True,
+            )
             return
 
         await interaction.response.defer()
@@ -188,6 +199,8 @@ class CodeCog(commands.Cog):
                 + (f"Project Conventions (from Notion):\n{conventions}\n\n" if conventions else "")
                 + f"{outline}"
             )
+            protected_paths = load_protected_paths(self.bot.runner.checks_file, full_repo, repo_dir)
+            contract = ChangeContract.create(repo_dir, paths, paths, protected_paths=protected_paths)
             plan = await self.bot.llm.chat(
                 SMART,
                 [{"role": "system", "content": CODE_PLAN_SYSTEM}, {"role": "user", "content": user_prompt}],
@@ -225,10 +238,13 @@ class CodeCog(commands.Cog):
         commit_title = propose_commit_title(task)
         await self.bot.db.save_code_task(thread.id, full_repo, branch, task, plan, status="planned")
         await self.bot.db.create_code_subtask(
-            thread.id, task, plan, model=model, commit_title=commit_title, status="planned",
+            thread.id, task, plan, required_paths=contract.required_paths,
+            allowed_paths=contract.allowed_paths, model=model, commit_title=commit_title, status="planned",
         )
         chunks = split_message(
-            f"📋 **Proposed Implementation Plan**\n\n{plan}\n\n**Commit:** `{commit_title}`"
+            f"📋 **Proposed Implementation Plan**\n\n{plan}\n\n"
+            f"**Allowed scope:** {', '.join(f'`{path}`' for path in contract.allowed_paths)}\n"
+            f"**Commit:** `{commit_title}`"
         )
         await status_msg.edit(content=chunks[0])
         for c in chunks[1:]:
@@ -244,7 +260,7 @@ class CodeCog(commands.Cog):
     @app_commands.describe(
         request="The next independently planned change",
         required_paths="Comma-separated repository-relative paths that must change",
-        only_paths="Reject every changed path not listed in required_paths",
+        only_paths="Deprecated; must remain enabled so the approved paths are a hard boundary",
         commit_title="Optional Conventional Commit title",
     )
     async def continue_pr(
@@ -262,6 +278,11 @@ class CodeCog(commands.Cog):
         if not paths:
             await interaction.response.send_message(
                 "`required_paths` must contain at least one repository-relative path.", ephemeral=True,
+            )
+            return
+        if not only_paths:
+            await interaction.response.send_message(
+                "Unrestricted model edits are disabled; `only_paths` must be enabled.", ephemeral=True,
             )
             return
         await interaction.response.send_message("🧭 Continuation planning started in this thread.")
@@ -288,8 +309,13 @@ class CodeCog(commands.Cog):
                 repo_dir, outline = await self.bot.runner.prepare_existing_workspace(
                     thread.id, record["repo"], record["branch"], request,
                 )
-                allowed_paths = required_paths if only_paths else None
-                contract = ChangeContract.create(repo_dir, required_paths, allowed_paths)
+                allowed_paths = required_paths
+                protected_paths = load_protected_paths(
+                    self.bot.runner.checks_file, record["repo"], repo_dir,
+                )
+                contract = ChangeContract.create(
+                    repo_dir, required_paths, allowed_paths, protected_paths=protected_paths,
+                )
                 title = (
                     validate_commit_title(commit_title)
                     if commit_title.strip()
@@ -326,9 +352,7 @@ class CodeCog(commands.Cog):
                 return
 
             scope = (
-                "unrestricted"
-                if contract.allowed_paths is None
-                else ", ".join(f"`{path}`" for path in contract.allowed_paths)
+                ", ".join(f"`{path}`" for path in contract.allowed_paths)
             )
             chunks = split_message(
                 f"📋 **Continued PR Subtask Plan**\n\n{plan}\n\n"
@@ -587,7 +611,25 @@ class CodeCog(commands.Cog):
                 await progress.edit(content=f"⚠️ **Targeted fix failed on `{branch}`**\n```\n{outcome.error[:1700]}\n```")
                 return
 
-            pr_url = record["pr_url"] or await self._open_pr(repo_full, branch, task, plan, outcome.test_output)
+            try:
+                pr_url = record["pr_url"] or await self._open_pr(
+                    repo_full, branch, task, plan, outcome.test_output,
+                )
+            except Exception as exc:
+                log.exception("Draft PR creation failed after fix push")
+                await self.bot.db.update_code_task_status(thread.id, "pr_failed")
+                await self.bot.db.update_code_subtask_result(
+                    subtask["id"], "pr_failed", base_sha=outcome.base_sha,
+                    verification=_verification_data(outcome), commit_sha=outcome.commit_sha,
+                )
+                branch_url = f"https://github.com/{repo_full}/tree/{branch}"
+                await progress.edit(content=(
+                    f"⚠️ **Fix commit was pushed, but Draft PR creation failed.**\n"
+                    f"Branch: {branch_url}\n"
+                    f"Retry with `push` after correcting GitHub access.\n"
+                    f"Error: `{type(exc).__name__}: {exc}`"
+                )[:2000])
+                return
             await self.bot.db.update_code_task_status(thread.id, "done", pr_url=pr_url)
             await self.bot.db.update_code_subtask_result(
                 subtask["id"], "done",
@@ -622,7 +664,24 @@ class CodeCog(commands.Cog):
             if not outcome.ok:
                 await msg.edit(content=f"⚠️ **Push failed on `{branch}`**\n```\n{outcome.error[:1700]}\n```")
                 return
-            pr_url = await self._open_pr(repo_full, branch, task, plan, outcome.test_output)
+            try:
+                pr_url = await self._open_pr(repo_full, branch, task, plan, outcome.test_output)
+            except Exception as exc:
+                log.exception("Draft PR creation failed after push retry")
+                await self.bot.db.update_code_task_status(thread.id, "pr_failed")
+                if subtask:
+                    await self.bot.db.update_code_subtask_result(
+                        subtask["id"], "pr_failed", base_sha=outcome.base_sha,
+                        verification=_verification_data(outcome), commit_sha=outcome.commit_sha,
+                    )
+                branch_url = f"https://github.com/{repo_full}/tree/{branch}"
+                await msg.edit(content=(
+                    f"⚠️ **Branch was pushed, but Draft PR creation failed.**\n"
+                    f"Branch: {branch_url}\n"
+                    f"Retry with `push` after correcting GitHub access.\n"
+                    f"Error: `{type(exc).__name__}: {exc}`"
+                )[:2000])
+                return
             await self.bot.db.update_code_task_status(thread.id, "done", pr_url=pr_url)
             commit_line = f"📝 **Commit:** `{subtask['commit_title']}`\n" if subtask else ""
             summary = (
@@ -638,24 +697,20 @@ class CodeCog(commands.Cog):
             await msg.edit(content=summary[:2000])
 
     async def _open_pr(self, repo_full: str, branch: str, task: str, plan: str, test_output: str) -> str:
-        try:
-            default_branch = await self.bot.github.get_default_branch(repo_full)
-            pr_body = (
-                f"## Automated Code Task (`devbot`)\n\n"
-                f"**Task:** {task}\n\n"
-                f"### Implementation Plan\n{plan}\n\n"
-                f"### Verification\n```\n{test_output}\n```"
-            )
-            return await self.bot.github.create_draft_pr(
-                repo_full=repo_full,
-                head_branch=branch,
-                base_branch=default_branch,
-                title=f"[agent] {task.splitlines()[0][:120]}",
-                body=pr_body,
-            )
-        except Exception as exc:
-            log.warning("Draft PR creation failed (branch was still pushed): %s", exc)
-            return f"https://github.com/{repo_full}/tree/{branch}"
+        default_branch = await self.bot.github.get_default_branch(repo_full)
+        pr_body = (
+            f"## Automated Code Task (`devbot`)\n\n"
+            f"**Task:** {task}\n\n"
+            f"### Implementation Plan\n{plan}\n\n"
+            f"### Verification\n```\n{test_output}\n```"
+        )
+        return await self.bot.github.create_draft_pr(
+            repo_full=repo_full,
+            head_branch=branch,
+            base_branch=default_branch,
+            title=f"[agent] {task.splitlines()[0][:120]}",
+            body=pr_body,
+        )
 
     async def run_approved_task(self, thread: discord.Thread) -> None:
         async with self.bot.lock_for(thread.id):
@@ -729,7 +784,24 @@ class CodeCog(commands.Cog):
                 await progress.edit(content=f"⚠️ **Code run failed on `{branch}`**\n```\n{outcome.error[:1700]}\n```")
                 return
 
-            pr_url = await self._open_pr(repo_full, branch, task, plan, outcome.test_output)
+            try:
+                pr_url = await self._open_pr(repo_full, branch, task, plan, outcome.test_output)
+            except Exception as exc:
+                log.exception("Draft PR creation failed after initial push")
+                await self.bot.db.update_code_task_status(thread.id, "pr_failed")
+                if subtask:
+                    await self.bot.db.update_code_subtask_result(
+                        subtask["id"], "pr_failed", base_sha=outcome.base_sha,
+                        verification=_verification_data(outcome), commit_sha=outcome.commit_sha,
+                    )
+                branch_url = f"https://github.com/{repo_full}/tree/{branch}"
+                await progress.edit(content=(
+                    f"⚠️ **Branch was pushed, but Draft PR creation failed.**\n"
+                    f"Branch: {branch_url}\n"
+                    f"Retry with `push` after correcting GitHub access.\n"
+                    f"Error: `{type(exc).__name__}: {exc}`"
+                )[:2000])
+                return
             await self.bot.db.update_code_task_status(thread.id, "done", pr_url=pr_url)
             if subtask:
                 await self.bot.db.update_code_subtask_result(

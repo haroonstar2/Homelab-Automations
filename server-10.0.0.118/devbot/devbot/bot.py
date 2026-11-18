@@ -67,6 +67,8 @@ class DevBot(commands.Bot):
             cfg.data_dir, cfg.github_token, cfg.llm_base_url, cfg.llm_api_key,
             context_tokens=cfg.llm_context_tokens, output_tokens=cfg.llm_output_tokens,
             ollama_url=cfg.ollama_url, ollama_model=cfg.ollama_model,
+            verifier_docker_host=cfg.verifier_docker_host,
+            verifier_host_data_dir=cfg.verifier_host_data_dir,
         )
         self.thread_locks: dict[int, asyncio.Lock] = {}
 

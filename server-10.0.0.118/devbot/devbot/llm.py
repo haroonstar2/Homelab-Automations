@@ -13,6 +13,10 @@ FAST = "fast"    # check-ins, summaries, classification
 EMBED = "embed"  # document embeddings (nomic-embed-text, 768 dims)
 
 
+class IncompleteModelResponse(RuntimeError):
+    """The provider stopped before producing an ordinary complete text response."""
+
+
 class LLM:
     def __init__(self, base_url: str, api_key: str) -> None:
         # CPU inference: prompt processing alone can take minutes on long contexts.
@@ -25,7 +29,16 @@ class LLM:
             max_tokens=max_tokens,
             temperature=0.3,
         )
-        text = resp.choices[0].message.content or ""
+        if not resp.choices:
+            raise IncompleteModelResponse("Model response contained no choices")
+        choice = resp.choices[0]
+        if choice.finish_reason != "stop":
+            raise IncompleteModelResponse(
+                f"Model response was incomplete (finish_reason={choice.finish_reason!r})"
+            )
+        text = choice.message.content or ""
+        if not text.strip():
+            raise IncompleteModelResponse("Model returned an empty text response")
         usage = resp.usage
         if usage:
             log.info("llm %s: prompt=%s completion=%s tokens", model, usage.prompt_tokens, usage.completion_tokens)

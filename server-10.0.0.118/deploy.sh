@@ -8,6 +8,20 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+if [ ! -S /run/user/1000/docker.sock ]; then
+  echo "ERROR: rootless Docker socket /run/user/1000/docker.sock is missing." >&2
+  echo "Install and start Docker rootless mode for uid 1000 before deploying devbot." >&2
+  exit 1
+fi
+if ! docker --host unix:///run/user/1000/docker.sock info --format '{{json .SecurityOptions}}' | grep -qi rootless; then
+  echo "ERROR: verification daemon did not report rootless security mode." >&2
+  exit 1
+fi
+if [ "$(docker --host unix:///run/user/1000/docker.sock info --format '{{.CgroupDriver}} {{.CgroupVersion}}')" != "systemd 2" ]; then
+  echo "ERROR: rootless verification requires systemd cgroup v2 for resource limits." >&2
+  exit 1
+fi
+
 echo "==> 1/5 Creating /mnt/Storage1/devbot data directories..."
 sudo mkdir -p /mnt/Storage1/devbot/{archive,backup,docs,runner-scratch}
 sudo chown -R 1000:1000 /mnt/Storage1/devbot

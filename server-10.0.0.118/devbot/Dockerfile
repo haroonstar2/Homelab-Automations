@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     ca-certificates \
     curl \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 # Use the project-compatible official Node runtime rather than Debian's older
@@ -31,6 +32,7 @@ COPY requirements.txt requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.txt -c requirements.lock && pip check
 
 COPY devbot ./devbot
+COPY scripts ./scripts
 
 # uid 1000 matches the host user that owns /mnt/Storage1/devbot
 RUN useradd --create-home --uid 1000 devbot

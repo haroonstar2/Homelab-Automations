@@ -29,6 +29,8 @@ class Config:
     llm_output_tokens: int
     ollama_url: str
     ollama_model: str
+    verifier_docker_host: str
+    verifier_host_data_dir: Path
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -50,4 +52,6 @@ class Config:
             llm_output_tokens=int(os.environ.get("LLM_OUTPUT_TOKENS", "4096")),
             ollama_url=os.environ.get("OLLAMA_URL", "").rstrip("/"),
             ollama_model=os.environ.get("OLLAMA_MODEL", "").strip(),
+            verifier_docker_host=_required("VERIFIER_DOCKER_HOST"),
+            verifier_host_data_dir=Path(_required("VERIFIER_HOST_DATA_DIR")),
         )

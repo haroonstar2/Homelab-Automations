@@ -13,6 +13,31 @@ The file lives outside the model-editable checkout. Every listed command is requ
 without a shell and runs regardless of whether changes have already been committed.
 Missing policy, invalid configuration, unavailable tools or a nonzero command exit blocks publication.
 Include dependency setup explicitly when required. No package manager is guessed or run implicitly.
+The policy's `image` must use an immutable `sha256:...` local image ID or `name@sha256:...` repository
+digest and contain every tool invoked by its checks.
+Each repository policy may also define `protected_paths`. Files at or below those paths cannot appear in
+an approved model-edit scope, which keeps tests, build scripts, and verification configuration independent
+from the generated change.
+
+Every `/code` and `/continue` request requires an explicit comma-separated path scope. The owner sees that
+scope with the plan before approval. Aider validates the whole edit response before applying it, and the
+runner independently compares the final changed paths with the same contract before committing.
+
+## Verification isolation
+
+Checks run through the host user's rootless Docker daemon, never in the bot container. Each check receives
+only its literal policy environment and its current task checkout at `/workspace`. It has no network,
+Linux capabilities, or privilege escalation; its root filesystem is read-only, temporary storage is
+bounded, and CPU, memory, process count, and wall time are limited. The bot refuses a daemon that does not
+report rootless mode. Do not substitute `/var/run/docker.sock`.
+
+After installing rootless Docker for uid 1000 and deploying, run the adversarial live probe with the same
+digest-pinned Python image used by the policy:
+
+`docker compose exec devbot python -m scripts.verify_isolation python@sha256:<digest>`
+
+It succeeds only when bot environment secrets, sibling task data, root-filesystem writes, and external
+network access are all denied.
 
 ## Harness choice
 

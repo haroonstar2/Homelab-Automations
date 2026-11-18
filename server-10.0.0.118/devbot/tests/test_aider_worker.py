@@ -49,6 +49,23 @@ class HarnessFailureTests(unittest.TestCase):
                 run({"message": "Task", "result_file": str(result)})
             self.assertEqual(__import__("json").loads(result.read_text())["finish_reasons"], ["stop"])
 
+    def test_non_stop_finish_reason_fails_and_is_recorded(self):
+        coder = self.coder()
+        coder.main_model = SimpleNamespace(name="openai/smart", info={})
+        coder.total_tokens_sent = 10
+        coder.total_tokens_received = 5
+        coder.show_send_output = Mock()
+        completion = SimpleNamespace(choices=[SimpleNamespace(finish_reason="length")])
+        coder.run.side_effect = lambda **kw: coder.show_send_output(completion)
+        with tempfile.TemporaryDirectory() as tmp:
+            result = Path(tmp) / "result.json"
+            with patch("devbot.aider_worker.make_coder", return_value=coder):
+                with self.assertRaisesRegex(RuntimeError, "invalid finish reasons"):
+                    run({"message": "Task", "result_file": str(result)})
+            self.assertEqual(
+                __import__("json").loads(result.read_text())["finish_reasons"], ["length"],
+            )
+
     def test_exhausted_or_malformed_response_fails(self):
         for attr in ("num_exhausted_context_windows", "num_malformed_responses"):
             coder = self.coder()

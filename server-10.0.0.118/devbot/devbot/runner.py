@@ -16,6 +16,8 @@ Flow:
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import os
@@ -402,6 +404,8 @@ class CodeRunner:
         self, data_dir: Path, github_token: str, llm_base_url: str, llm_api_key: str,
         context_tokens: int = 16384, output_tokens: int = 4096,
         ollama_url: str = "", ollama_model: str = "",
+        verifier_docker_host: str = "unix:///run/rootless-docker/docker.sock",
+        verifier_host_data_dir: Path | None = None,
     ) -> None:
         if context_tokens < 4096 or output_tokens < 512 or output_tokens >= context_tokens:
             raise ValueError("Invalid LLM context/output token budget")
@@ -414,18 +418,43 @@ class CodeRunner:
         self.output_tokens = output_tokens
         self.ollama_url = ollama_url
         self.ollama_model = ollama_model
+        from .container_verifier import ContainerVerifier
+        self.verifier = ContainerVerifier(
+            data_dir, verifier_host_data_dir or data_dir, verifier_docker_host, _run_cmd,
+        )
         self.active_status: dict[int, str] = {}
 
-    def _auth_url(self, repo_full: str) -> str:
-        return f"https://x-access-token:{self.github_token}@github.com/{repo_full}.git"
+    @staticmethod
+    def _remote_url(repo_full: str) -> str:
+        return f"https://github.com/{repo_full}.git"
+
+    def _git_auth_env(self) -> dict[str, str]:
+        """Authenticate Git over HTTPS without putting the token in argv or repository config."""
+        env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+        if not self.github_token:
+            return env
+        credentials = base64.b64encode(
+            f"x-access-token:{self.github_token}".encode("utf-8")
+        ).decode("ascii")
+        env.update({
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "http.extraHeader",
+            "GIT_CONFIG_VALUE_0": f"Authorization: Basic {credentials}",
+        })
+        return env
 
     def _redact(self, text: str) -> str:
         if self.github_token:
             return text.replace(self.github_token, "***")
         return text
 
-    async def _git(self, repo_dir: Path, *args: str) -> str:
-        code, output = await _run_cmd(["git", *args], cwd=repo_dir, timeout=180)
+    async def _git(self, repo_dir: Path, *args: str, authenticated: bool = False) -> str:
+        code, output = await _run_cmd(
+            ["git", *args],
+            cwd=repo_dir,
+            env=self._git_auth_env() if authenticated else None,
+            timeout=180,
+        )
         if code:
             raise RuntimeError(f"git {args[0]} failed (exit {code}): {self._redact(output)}")
         return output.strip()
@@ -438,6 +467,36 @@ class CodeRunner:
             for path in (*tracked.split("\0"), *untracked.split("\0"))
             if path
         }
+
+    async def _worktree_fingerprint(self, repo_dir: Path) -> str:
+        """Hash every publishable tracked diff and untracked file without following symlinks."""
+        tracked_diff = await self._git(
+            repo_dir, "diff", "--binary", "--no-ext-diff", "HEAD", "--",
+        )
+        untracked = await self._git(
+            repo_dir, "ls-files", "--others", "--exclude-standard", "-z",
+        )
+
+        def digest() -> str:
+            result = hashlib.sha256(tracked_diff.encode("utf-8", errors="surrogatepass"))
+            for relative in sorted(path for path in untracked.split("\0") if path):
+                result.update(b"\0path\0")
+                result.update(relative.encode("utf-8", errors="surrogatepass"))
+                path = repo_dir / relative
+                stat = path.lstat()
+                result.update(str(stat.st_mode).encode("ascii"))
+                if path.is_symlink():
+                    result.update(b"\0symlink\0")
+                    result.update(os.readlink(path).encode("utf-8", errors="surrogatepass"))
+                elif path.is_file():
+                    with path.open("rb") as stream:
+                        for block in iter(lambda: stream.read(1024 * 1024), b""):
+                            result.update(block)
+                else:
+                    result.update(b"\0special\0")
+            return result.hexdigest()
+
+        return await asyncio.to_thread(digest)
 
     async def _cumulative_diff_stat(self, repo_dir: Path) -> str:
         code, remote_head = await _run_cmd(
@@ -484,9 +543,14 @@ class CodeRunner:
 
     async def _sync_branch(self, repo_dir: Path, branch: str) -> None:
         await self._assert_branch(repo_dir, branch)
-        remote = await self._git(repo_dir, "ls-remote", "--heads", "origin", f"refs/heads/{branch}")
+        remote = await self._git(
+            repo_dir, "ls-remote", "--heads", "origin", f"refs/heads/{branch}", authenticated=True,
+        )
         if remote:
-            await self._git(repo_dir, "fetch", "origin", f"refs/heads/{branch}:refs/remotes/origin/{branch}")
+            await self._git(
+                repo_dir, "fetch", "origin", f"refs/heads/{branch}:refs/remotes/origin/{branch}",
+                authenticated=True,
+            )
             await self._git(repo_dir, "merge", "--ff-only", f"origin/{branch}")
 
     async def prepare_workspace(self, thread_id: int, repo_full: str, task_hint: str = "") -> tuple[Path, str]:
@@ -498,7 +562,8 @@ class CodeRunner:
         repo_dir = task_dir / "repo"
 
         code, out = await _run_cmd(
-            ["git", "clone", "--depth", "20", self._auth_url(repo_full), str(repo_dir)],
+            ["git", "clone", "--depth", "20", self._remote_url(repo_full), str(repo_dir)],
+            env=self._git_auth_env(),
             timeout=180,
         )
         if code != 0:
@@ -514,9 +579,14 @@ class CodeRunner:
         repo_dir = self.scratch_root / str(thread_id) / "repo"
         if not repo_dir.exists():
             repo_dir, _ = await self.prepare_workspace(thread_id, repo_full, task_hint=task_hint)
-            await self._git(repo_dir, "fetch", "origin", f"refs/heads/{branch}:refs/remotes/origin/{branch}")
+            await self._git(
+                repo_dir, "fetch", "origin", f"refs/heads/{branch}:refs/remotes/origin/{branch}",
+                authenticated=True,
+            )
             await self._git(repo_dir, "checkout", "-b", branch, f"origin/{branch}")
-        await self._git(repo_dir, "remote", "set-url", "origin", self._auth_url(repo_full))
+        await self._assert_branch(repo_dir, branch)
+        await self._discard_scratch_changes(repo_dir)
+        await self._git(repo_dir, "remote", "set-url", "origin", self._remote_url(repo_full))
         await self._sync_branch(repo_dir, branch)
         return repo_dir, await self.build_planning_context(repo_dir, task_hint)
 
@@ -566,11 +636,15 @@ class CodeRunner:
         safe = repo_full.replace("/", "__")
         cache_dir = self.scratch_root / "ask-cache" / safe
         if (cache_dir / ".git").exists():
-            await _run_cmd(["git", "pull", "--ff-only"], cwd=cache_dir, timeout=60)
+            await _run_cmd(
+                ["git", "pull", "--ff-only"], cwd=cache_dir,
+                env=self._git_auth_env(), timeout=60,
+            )
         else:
             cache_dir.parent.mkdir(parents=True, exist_ok=True)
             code, out = await _run_cmd(
-                ["git", "clone", "--depth", "10", self._auth_url(repo_full), str(cache_dir)],
+                ["git", "clone", "--depth", "10", self._remote_url(repo_full), str(cache_dir)],
+                env=self._git_auth_env(),
                 timeout=120,
             )
             if code != 0:
@@ -626,7 +700,11 @@ class CodeRunner:
                 "documentation": ground_truth,
             })
 
-            contract = ChangeContract.create(repo_dir, required_paths, allowed_paths)
+            from .verification import load_protected_paths
+            protected_paths = load_protected_paths(self.checks_file, repo_full, repo_dir)
+            contract = ChangeContract.create(
+                repo_dir, required_paths, allowed_paths, protected_paths=protected_paths,
+            )
             target_files = select_target_files(repo_dir, f"{plan}\n{task}", max_files=8)
             target_files = contract.add_targets(target_files)
             log.info("Selected ranked target files for /code: %s", target_files)
@@ -656,7 +734,9 @@ class CodeRunner:
                 )
 
             await self._run_aider(
-                repo_dir, target_files, task, plan, conventions, emit, ground_truth=combined_gt, model=model, on_think=on_think
+                repo_dir, target_files, task, plan, conventions, emit,
+                ground_truth=combined_gt, model=model, on_think=on_think,
+                allowed_paths=contract.allowed_paths,
             )
             status_out = await self._git(repo_dir, "status", "--porcelain")
 
@@ -690,6 +770,7 @@ class CodeRunner:
                 await self._repair_on_error(
                     repo_dir, target_files, task, plan, test_output, emit,
                     conventions=conventions, ground_truth=combined_gt, model=model,
+                    allowed_paths=contract.allowed_paths,
                 )
                 test_report = await self._run_verification(repo_dir, repo_full)
                 test_output, passed = test_report
@@ -716,7 +797,8 @@ class CodeRunner:
             contract_artifact = {
                 "base_sha": base_sha,
                 "required_paths": list(contract.required_paths),
-                "allowed_paths": None if contract.allowed_paths is None else list(contract.allowed_paths),
+                "allowed_paths": list(contract.allowed_paths),
+                "protected_paths": list(contract.protected_paths),
                 **contract_result.as_dict(),
             }
             self._artifact(task_dir, "change-contract.json", contract_artifact)
@@ -755,6 +837,7 @@ class CodeRunner:
             p_code, p_out = await _run_cmd(
                 ["git", "push", "-u", "origin", branch],
                 cwd=repo_dir,
+                env=self._git_auth_env(),
                 timeout=120,
             )
             if p_code != 0:
@@ -806,18 +889,27 @@ class CodeRunner:
 
     async def _run_aider(
         self, repo_dir, target_files, task, plan, conventions, emit,
-        ground_truth="", model="smart", on_think=None,
+        ground_truth="", model="smart", on_think=None, allowed_paths=None,
     ):
         await emit("Running Aider repository map and diff editor (local-model limit: 15 minutes)…")
+        scope_instruction = (
+            "Writable file scope is unrestricted."
+            if allowed_paths is None
+            else "Writable file scope (hard enforced):\n"
+            + "\n".join(f"- {path}" for path in allowed_paths)
+            + "\nDo not create, edit, rename, or delete any other path."
+        )
         payload = {
             "model": model,
             "artifact_dir": str(repo_dir.parent / "aider-cache"),
             "files": target_files,
+            "allowed_files": None if allowed_paths is None else list(allowed_paths),
             "context_tokens": self.context_tokens,
             "output_tokens": self.output_tokens,
             "result_file": str(repo_dir.parent / "artifacts" / "aider-result.json"),
             "message": (
                 f"Task:\n{task}\n\nApproved plan:\n{plan}\n\n"
+                f"{scope_instruction}\n\n"
                 f"{CODE_STYLE_CONVENTIONS}\nProject conventions:\n{conventions}\n\n"
                 f"Reference documentation:\n{ground_truth}\n\n"
                 "Inspect relevant implementations and tests. Complete the approved task across files."
@@ -892,7 +984,14 @@ class CodeRunner:
         if not repo_dir.exists():
             return RunOutcome(ok=False, branch=branch, commit_sha="", diff_stat="", test_output="", error="Scratch repo not found.")
         await self._assert_branch(repo_dir, branch)
-        await self._git(repo_dir, "remote", "set-url", "origin", self._auth_url(repo_full))
+        await self._git(repo_dir, "remote", "set-url", "origin", self._remote_url(repo_full))
+        dirty = await self._git(repo_dir, "status", "--porcelain=v1", "-z")
+        if dirty:
+            return RunOutcome(
+                False, branch, "", "", "",
+                "Push retry requires a clean worktree; discard or commit unpublished changes first.",
+            )
+        verified_sha = await self._git(repo_dir, "rev-parse", "HEAD")
         sha_out = await self._git(repo_dir, "rev-parse", "--short", "HEAD")
         diff_stat = await self._git(repo_dir, "show", "--stat", "--oneline", "HEAD")
         cumulative_diff_stat = await self._cumulative_diff_stat(repo_dir)
@@ -904,9 +1003,16 @@ class CodeRunner:
                 "Verification failed; existing commit was not pushed.",
                 verification=test_report.as_dict() if hasattr(test_report, "as_dict") else None,
             )
+        current_sha = await self._git(repo_dir, "rev-parse", "HEAD")
+        if current_sha != verified_sha:
+            return RunOutcome(
+                False, branch, sha_out.strip(), diff_stat.strip(), test_output,
+                "Branch HEAD changed after verification; refusing to push unverified commit.",
+            )
         p_code, p_out = await _run_cmd(
             ["git", "push", "-u", "origin", branch],
             cwd=repo_dir,
+            env=self._git_auth_env(),
             timeout=120,
         )
         if p_code != 0:
@@ -925,7 +1031,10 @@ class CodeRunner:
             diff_stat=diff_stat.strip(),
             test_output=test_output,
             cumulative_diff_stat=cumulative_diff_stat,
-            verification=test_report.as_dict() if hasattr(test_report, "as_dict") else None,
+            verification=(
+                {**test_report.as_dict(), "commit_sha": verified_sha}
+                if hasattr(test_report, "as_dict") else {"commit_sha": verified_sha}
+            ),
         )
 
     async def followup_fix(
@@ -961,18 +1070,28 @@ class CodeRunner:
             if not repo_dir.exists():
                 await emit("📥 Re-cloning repository branch…")
                 repo_dir, _ = await self.prepare_workspace(thread_id, repo_full, task_hint=task)
-                await self._git(repo_dir, "fetch", "origin", f"refs/heads/{branch}:refs/remotes/origin/{branch}")
+                await self._git(
+                    repo_dir, "fetch", "origin", f"refs/heads/{branch}:refs/remotes/origin/{branch}",
+                    authenticated=True,
+                )
                 await self._git(repo_dir, "checkout", "-b", branch, f"origin/{branch}")
 
-            await self._git(repo_dir, "remote", "set-url", "origin", self._auth_url(repo_full))
+            await self._assert_branch(repo_dir, branch)
+            await self._discard_scratch_changes(repo_dir)
+            await self._git(repo_dir, "remote", "set-url", "origin", self._remote_url(repo_full))
             await self._sync_branch(repo_dir, branch)
             base_sha = await self._git(repo_dir, "rev-parse", "HEAD")
-            contract = ChangeContract.create(repo_dir, required_paths, allowed_paths)
+            from .verification import load_protected_paths
+            protected_paths = load_protected_paths(self.checks_file, repo_full, repo_dir)
+            contract = ChangeContract.create(
+                repo_dir, required_paths, allowed_paths, protected_paths=protected_paths,
+            )
             target_files = select_target_files(repo_dir, f"{feedback}\n{plan}\n{task}", max_files=8)
             target_files = contract.add_targets(target_files)
             await self._repair_on_error(
                 repo_dir, target_files, task, plan, feedback, emit,
                 conventions=conventions, ground_truth=ground_truth, model=model,
+                allowed_paths=contract.allowed_paths,
             )
 
             await emit("🧪 **Running required component verification…**")
@@ -990,6 +1109,7 @@ class CodeRunner:
                     repo_dir, target_files, task, plan,
                     f"Original owner feedback:\n{feedback}\n\nVerification output:\n{test_output}", emit,
                     conventions=conventions, ground_truth=ground_truth, model=model,
+                    allowed_paths=contract.allowed_paths,
                 )
                 test_report = await self._run_verification(repo_dir, repo_full)
                 test_output, passed = test_report
@@ -1011,7 +1131,8 @@ class CodeRunner:
             contract_artifact = {
                 "base_sha": base_sha,
                 "required_paths": list(contract.required_paths),
-                "allowed_paths": None if contract.allowed_paths is None else list(contract.allowed_paths),
+                "allowed_paths": list(contract.allowed_paths),
+                "protected_paths": list(contract.protected_paths),
                 **contract_result.as_dict(),
             }
             self._artifact(repo_dir.parent, "change-contract.json", contract_artifact)
@@ -1040,21 +1161,22 @@ class CodeRunner:
 
     async def _repair_on_error(
         self, repo_dir, target_files, task, plan, error_output, emit,
-        conventions="", ground_truth="", model="smart",
+        conventions="", ground_truth="", model="smart", allowed_paths=None,
     ):
         await self._run_aider(
             repo_dir, target_files,
             f"{task}\n\nRepair these verification failures / review findings:\n{error_output}",
             plan, conventions, emit, ground_truth=ground_truth, model=model,
+            allowed_paths=allowed_paths,
         )
 
     async def _run_verification(self, repo_dir: Path, repo_full: str):
         from .verification import VerificationReport, verify
 
-        before = await self._git(repo_dir, "status", "--porcelain=v1", "-z")
-        report = await verify(self.checks_file, repo_full, repo_dir, _run_cmd)
+        before = await self._worktree_fingerprint(repo_dir)
+        report = await verify(self.checks_file, repo_full, repo_dir, self.verifier.run)
         output, passed = report
-        after = await self._git(repo_dir, "status", "--porcelain=v1", "-z")
+        after = await self._worktree_fingerprint(repo_dir)
         if after != before:
             mutation = "Verification MUTATED the worktree; refusing to publish test/setup side effects."
             check = {

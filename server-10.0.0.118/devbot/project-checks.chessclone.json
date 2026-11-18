@@ -1,15 +1,63 @@
 {
   "haroonstar2/chessclone": {
+    "image": "sha256:7e3c0c28a7f02b1392cdef198d9860e1f281c7287bbbe23f0cf240eef3e3d73a",
+    "protected_paths": [
+      ".github/workflows",
+      "docker-compose.yml",
+      "package.json",
+      "package-lock.json",
+      "apps/core-api/package.json",
+      "apps/core-api/jest.config.mjs",
+      "apps/core-api/nest-cli.json",
+      "apps/core-api/prisma/schema.prisma",
+      "apps/core-api/tsconfig.json",
+      "apps/core-api/tsconfig.build.json",
+      "apps/core-api/test",
+      "apps/core-api/src/app.controller.spec.ts",
+      "apps/core-api/src/auth/auth.controller.spec.ts",
+      "apps/core-api/src/auth/auth.service.spec.ts",
+      "apps/core-api/src/email/email.service.spec.ts",
+      "apps/core-api/src/games/elo.spec.ts",
+      "apps/core-api/src/games/game-completion.service.spec.ts",
+      "apps/core-api/src/logging/logging.config.spec.ts",
+      "apps/core-api/src/redis/redis.service.spec.ts",
+      "apps/core-api/src/settings/settings.controller.spec.ts",
+      "apps/core-api/src/settings/settings.service.spec.ts",
+      "apps/core-api/src/users/users.service.spec.ts",
+      "apps/web-client/package.json",
+      "apps/web-client/jest.config.mjs",
+      "apps/web-client/jest.setup.js",
+      "apps/web-client/next.config.ts",
+      "apps/web-client/tsconfig.json",
+      "apps/web-client/__tests__",
+      "apps/game-server/go.mod",
+      "apps/game-server/go.sum",
+      "apps/game-server/internal/game/completion_test.go",
+      "apps/game-server/internal/game/manager_test.go",
+      "apps/game-server/internal/game/room_test.go",
+      "apps/game-server/internal/observability/observability_test.go",
+      "apps/game-server/internal/redis/completion_test.go",
+      "apps/game-server/internal/redis/redis_test.go",
+      "apps/game-server/internal/ws/client_test.go",
+      "apps/game-server/internal/ws/handler_test.go",
+      "apps/game-server/internal/ws/hub_test.go"
+    ],
     "checks": [
       {
-        "argv": ["npm", "ci", "--prefer-offline", "--no-audit"],
+        "argv": [
+          "sh", "-ceu",
+          "rm -rf /tmp/npm-cache; cp -R /opt/npm-cache /tmp/npm-cache; npm ci --offline --no-audit --cache /tmp/npm-cache"
+        ],
         "component": "dependencies",
         "cwd": ".",
         "timeout": 900,
-        "env": {"HOME": "/home/devbot"}
+        "env": {"HOME": "/home/devbot", "NPM_CONFIG_OFFLINE": "true"}
       },
       {
-        "argv": ["npm", "run", "prisma:generate", "--workspace", "core-api"],
+        "argv": [
+          "sh", "-ceu",
+          "rm -rf node_modules/@prisma/engines; cp -R /opt/prisma-engines node_modules/@prisma/engines; npm run prisma:generate --workspace core-api"
+        ],
         "component": "core-api prisma",
         "cwd": ".",
         "timeout": 300,
@@ -47,7 +95,10 @@
         "env": {
           "HOME": "/home/devbot",
           "REDIS_HOST": "saas-redis",
-          "REDIS_PORT": "6379"
+          "REDIS_PORT": "6379",
+          "GOMODCACHE": "/opt/go-mod-cache",
+          "GOCACHE": "/tmp/go-build",
+          "GOPROXY": "off"
         }
       }
     ]

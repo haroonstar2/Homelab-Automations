@@ -69,6 +69,15 @@ def make_coder(payload):
     RepoMap.TAGS_CACHE_DIR = str(artifact_dir / "tags-cache")
     root = Path.cwd().resolve()
     files = [str(checked_path(root, name)) for name in payload["files"]]
+    raw_allowed = payload.get("allowed_files")
+    if raw_allowed is not None and (
+        not isinstance(raw_allowed, list)
+        or not all(isinstance(name, str) and name for name in raw_allowed)
+    ):
+        raise ValueError("allowed_files must be null or a list of repository-relative paths")
+    allowed_files = None if raw_allowed is None else {
+        checked_path(root, name).relative_to(root).as_posix() for name in raw_allowed
+    }
     artifact_dir.mkdir(parents=True, exist_ok=True)
     io = InputOutput(
         yes=True, pretty=False, fancy_input=False,
@@ -105,6 +114,7 @@ def make_coder(payload):
     # reflection is enough to correct a malformed diff without multiplying
     # slow local-model calls by the library default of three.
     coder.max_reflections = 1
+    coder.devbot_allowed_files = allowed_files
     def strict_token_check(messages):
         estimated = model.token_count(messages)
         if estimated is None or estimated >= input_tokens:
@@ -121,7 +131,10 @@ def make_coder(payload):
         edits = original_get_edits()
         # Validate the entire response before Aider's dry-run can touch any paths.
         for name, *_ in edits:
-            checked_path(root, name)
+            path = checked_path(root, name)
+            relative = path.relative_to(root).as_posix()
+            if coder.devbot_allowed_files is not None and relative not in coder.devbot_allowed_files:
+                raise ValueError(f"Aider edit is outside the approved file scope: {relative}")
         return edits
 
     coder.get_edits = get_edits
@@ -148,18 +161,35 @@ def run(payload):
 
         coder.show_send_output = record_finish_reason
     coder.run(with_message=payload["message"])
-    if errors or coder.num_exhausted_context_windows or coder.num_malformed_responses:
-        raise RuntimeError("Aider reported incomplete generation or an edit error; inspect the run log")
-    Path(payload["result_file"]).write_text(json.dumps({
-        "aider_version": AIDER_VERSION,
-        "model": coder.main_model.name,
-        "model_info": coder.main_model.info,
-        "tokens_sent": coder.total_tokens_sent,
-        "tokens_received": coder.total_tokens_received,
-        "finish_reasons": finish_reasons,
-        "malformed_responses": coder.num_malformed_responses,
-        "exhausted_context_windows": coder.num_exhausted_context_windows,
-    }, indent=2, default=str), encoding="utf-8")
+    if payload.get("result_file"):
+        model = getattr(coder, "main_model", None)
+        metadata = {
+            "aider_version": AIDER_VERSION,
+            "model": getattr(model, "name", ""),
+            "model_info": getattr(model, "info", {}),
+            "tokens_sent": getattr(coder, "total_tokens_sent", 0),
+            "tokens_received": getattr(coder, "total_tokens_received", 0),
+            "finish_reasons": finish_reasons,
+            "malformed_responses": coder.num_malformed_responses,
+            "exhausted_context_windows": coder.num_exhausted_context_windows,
+        }
+        Path(payload["result_file"]).write_text(
+            json.dumps(metadata, indent=2, default=str), encoding="utf-8",
+        )
+    invalid_finish_reasons = [reason for reason in finish_reasons if reason != "stop"]
+    if (
+        errors
+        or coder.num_exhausted_context_windows
+        or coder.num_malformed_responses
+        or invalid_finish_reasons
+    ):
+        detail = (
+            f"; invalid finish reasons: {invalid_finish_reasons}"
+            if invalid_finish_reasons else ""
+        )
+        raise RuntimeError(
+            "Aider reported incomplete generation or an edit error; inspect the run log" + detail
+        )
 
 
 if __name__ == "__main__":

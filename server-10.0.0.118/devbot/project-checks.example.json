@@ -1,5 +1,10 @@
 {
   "owner/python-project": {
+    "image": "python@sha256:REPLACE_WITH_REVIEWED_64_HEX_DIGEST",
+    "protected_paths": [
+      "tests",
+      "pyproject.toml"
+    ],
     "checks": [
       {
         "argv": ["python", "-m", "unittest", "discover", "-s", "tests", "-v"],
