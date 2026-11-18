@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "${1:-}" != "--apply" || -n "${2:-}" ]]; then
-  echo "Usage: sudo $0 --apply"
+if [[ "${1:-}" != "--apply" ]]; then
+  echo "Usage: sudo $0 --apply [--case CASE_NAME]"
   echo "Runs the automated local-code qualification cases as ai-agent."
   exit 2
+fi
+
+case_name=""
+if [[ -n "${2:-}" ]]; then
+  if [[ "$2" != "--case" || -z "${3:-}" || -n "${4:-}" ]]; then
+    echo "Usage: sudo $0 --apply [--case CASE_NAME]" >&2
+    exit 2
+  fi
+  case_name="$3"
 fi
 
 if [[ "$EUID" -ne 0 ]]; then
@@ -50,8 +59,12 @@ runuser -u "$agent_user" -- env \
     source "$1"
     set +a
     "$2" --version >"$4/opencode-version.txt"
-    exec python3 "$3" --model litellm/local-code --opencode "$2" --output "$4"
-  ' bash "$secret_env" "$opencode" "$runner" "$output"
+    args=(--model litellm/local-code --opencode "$2" --output "$4")
+    if [[ -n "$5" ]]; then
+      args+=(--case "$5")
+    fi
+    exec python3 "$3" "${args[@]}"
+  ' bash "$secret_env" "$opencode" "$runner" "$output" "$case_name"
 
 echo "Qualification evidence: $output"
 
