@@ -16,6 +16,13 @@ agent_user="ai-agent"
 agent_group="$(id -gn "$agent_user")"
 agent_uid="$(id -u "$agent_user")"
 agent_home="$(getent passwd "$agent_user" | cut -d: -f6)"
+container_uid=10001
+subuid_start="$(awk -F: -v user="$agent_user" '$1 == user { print $2; exit }' /etc/subuid)"
+[[ "$subuid_start" =~ ^[0-9]+$ ]] || {
+  echo "No subordinate UID range exists for $agent_user." >&2
+  exit 1
+}
+mapped_container_uid=$((subuid_start + container_uid - 1))
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 platform_root="/mnt/Storage1/ai-platform"
 
@@ -37,7 +44,7 @@ workspace_root="$platform_root/workspaces/openhands"
 runtime_env="$agent_home/.config/ai-platform/openhands.env"
 user_unit_dir="$agent_home/.config/systemd/user"
 
-for required in curl tar xz sha256sum openssl setfacl; do
+for required in awk curl tar xz sha256sum openssl setfacl; do
   command -v "$required" >/dev/null 2>&1 || {
     echo "Required command is missing: $required" >&2
     exit 1
@@ -82,7 +89,7 @@ runuser -u "$agent_user" -- env \
 
 install -d -m 0750 -o "$agent_user" -g "$agent_group" "$state_root" "$workspace_root"
 setfacl -m "u:${agent_user}:--x" "$platform_root" "$platform_root/openhands"
-setfacl -m u:10001:rwx "$state_root" "$workspace_root"
+setfacl -m "u:${mapped_container_uid}:rwx,m::rwx" "$state_root" "$workspace_root"
 
 install -d -m 0700 -o "$agent_user" -g "$agent_group" \
   "$agent_home/.config/ai-platform" "$user_unit_dir"

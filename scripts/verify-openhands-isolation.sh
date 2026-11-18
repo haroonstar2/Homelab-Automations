@@ -12,8 +12,8 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-for required in chmod chown comm curl cut docker getent grep head id install jq mktemp \
-  readlink rm runuser sed seq sh sleep sort tail; do
+for required in awk chmod chown comm curl cut docker getent grep head id install jq mktemp \
+  readlink rm runuser sed seq setfacl sh sleep sort tail; do
   command -v "$required" >/dev/null 2>&1 || {
     echo "Required command is missing: $required" >&2
     exit 1
@@ -24,6 +24,13 @@ agent_user="ai-agent"
 agent_group="$(id -gn "$agent_user")"
 agent_uid="$(id -u "$agent_user")"
 agent_home="$(getent passwd "$agent_user" | cut -d: -f6)"
+container_uid_expected=10001
+subuid_start="$(awk -F: -v user="$agent_user" '$1 == user { print $2; exit }' /etc/subuid)"
+[[ "$subuid_start" =~ ^[0-9]+$ ]] || {
+  echo "No subordinate UID range exists for $agent_user." >&2
+  exit 1
+}
+mapped_container_uid=$((subuid_start + container_uid_expected - 1))
 runtime_dir="/run/user/$agent_uid"
 rootless_socket="$runtime_dir/docker.sock"
 canvas_url="http://127.0.0.1:18002"
@@ -88,6 +95,7 @@ fi
 install -d -m 0700 -o "$agent_user" -g "$agent_group" "$workspace_parent"
 workspace="$(mktemp -d "$workspace_parent/isolation-gate.XXXXXXXX")"
 chown "$agent_user:$agent_group" "$workspace"
+setfacl -m "u:${mapped_container_uid}:rwx,m::rwx" "$workspace"
 runuser -u "$agent_user" -- sh -c \
   'printf "%s\n" openhands-isolation-gate >"$1/sentinel.txt"; ln -sfn /etc "$1/escape"' \
   sh "$workspace"
