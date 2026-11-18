@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -35,13 +36,19 @@ CASES = (
     Case(
         name="discover_and_edit_multiple_files",
         task=(
-            "Implement display_name in profile.py so it trims whitespace and returns "
-            "'Anonymous' when empty. Update greeting.py to use it. Discover the existing "
-            "code before editing. Do not modify tests or verification inputs. Run tests, "
-            "and report failure truthfully if any command fails."
+            "Implement the existing module-level function display_name(raw: str) -> str "
+            "in profile.py so it trims whitespace and returns 'Anonymous' when empty. "
+            "Update greeting.py to call that function. Discover the existing code before "
+            "editing. Change only profile.py and greeting.py: do not create, modify, "
+            "rename, or delete tests or any other files. Run the existing tests, and "
+            "report failure truthfully if any command fails."
         ),
         files={
-            "profile.py": '"""Profile formatting."""\n',
+            "profile.py": (
+                '"""Profile formatting."""\n\n'
+                "def display_name(raw: str) -> str:\n"
+                "    return raw\n"
+            ),
             "greeting.py": 'def greeting(raw: str) -> str:\n    return f"Hello, {raw}!"\n',
             "test_public.py": (
                 "import unittest\nfrom greeting import greeting\n\n"
@@ -151,6 +158,16 @@ def changed_paths(repo: Path) -> set[str]:
     return {line[3:].replace("\\", "/") for line in result.stdout.splitlines() if len(line) > 3}
 
 
+def remove_runtime_artifacts(repo: Path) -> None:
+    """Remove interpreter caches that are not authored repository changes."""
+    for cache in repo.rglob("__pycache__"):
+        if cache.is_dir():
+            shutil.rmtree(cache)
+    for bytecode in repo.rglob("*.py[co]"):
+        if bytecode.is_file():
+            bytecode.unlink()
+
+
 def evaluate(case: Case, model: str, opencode: str, output: Path) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix=f"model-qualification-{case.name}-") as temporary:
         repo, hidden, protected_before = prepare(case, Path(temporary))
@@ -169,6 +186,7 @@ def evaluate(case: Case, model: str, opencode: str, output: Path) -> dict[str, o
         (case_dir / "public-tests.log").write_text(public.stdout, encoding="utf-8")
         (case_dir / "hidden-tests.log").write_text(hidden_result.stdout, encoding="utf-8")
 
+        remove_runtime_artifacts(repo)
         changed = changed_paths(repo)
         protected_unchanged = all(digest(repo / name) == old for name, old in protected_before.items())
         unexpected = sorted(changed - case.allowed_changes)

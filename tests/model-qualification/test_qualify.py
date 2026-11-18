@@ -24,6 +24,8 @@ class QualificationHarnessTests(unittest.TestCase):
             stub.write_text(
                 "#!/bin/sh\n"
                 "test \"$PWD\" = \"$(pwd)\" || exit 43\n"
+                "mkdir -p __pycache__\n"
+                ": >__pycache__/agent-created.pyc\n"
                 "exit 42\n",
                 encoding="utf-8",
             )
