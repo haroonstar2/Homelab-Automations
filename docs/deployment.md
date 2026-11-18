@@ -32,7 +32,8 @@ notes and configuration schema; do not change these pins in place on the server.
 
 The bootstrap requires `setfacl` so the documented OpenHands container uid
 10001 can access only its explicit state and project roots without making them
-world-writable.
+world-writable. It adds the invoking sudo user to the `ai-platform` service
+group; start a new login session before running operator backups.
 
 ## Core model and chat plane
 

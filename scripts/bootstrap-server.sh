@@ -15,12 +15,17 @@ fi
 service_user="ai-platform"
 agent_user="ai-agent"
 platform_root="/mnt/Storage1/ai-platform"
+operator_user="${SUDO_USER:-}"
 
 for account in "$service_user" "$agent_user"; do
   if ! id "$account" >/dev/null 2>&1; then
     useradd --create-home --shell /bin/bash "$account"
   fi
 done
+
+if [[ -n "$operator_user" && "$operator_user" != root ]] && id "$operator_user" >/dev/null 2>&1; then
+  usermod -aG "$service_user" "$operator_user"
+fi
 
 install -d -m 0750 -o "$service_user" -g "$service_user" \
   "$platform_root" \
@@ -49,10 +54,12 @@ else
 fi
 
 loginctl enable-linger "$agent_user"
+agent_uid="$(id -u "$agent_user")"
+systemctl start "user@${agent_uid}.service"
 
 if command -v dockerd-rootless-setuptool.sh >/dev/null 2>&1; then
-  agent_uid="$(id -u "$agent_user")"
-  runuser -l "$agent_user" -c "XDG_RUNTIME_DIR=/run/user/$agent_uid dockerd-rootless-setuptool.sh install"
+  runuser -l "$agent_user" -c "XDG_RUNTIME_DIR=/run/user/$agent_uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$agent_uid/bus dockerd-rootless-setuptool.sh install"
+  runuser -l "$agent_user" -c "XDG_RUNTIME_DIR=/run/user/$agent_uid DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$agent_uid/bus systemctl --user enable --now docker.service"
 else
   echo "Rootless Docker helper is missing; install docker-ce-rootless-extras, then rerun." >&2
   exit 1
