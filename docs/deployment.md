@@ -99,11 +99,11 @@ the Caddy listeners. It requires its generated agent-only backend key, disables 
 `OH_CONVERSATION_RUNTIME=docker` with the `ai-agent` rootless Docker socket.
 The configuration command first verifies that `ai-agent` can access its own
 rootless Docker daemon. It performs an authenticated completion through the
-`local-code` proxy route, stores the LiteLLM credential in Agent Canvas's
-encrypted provider store, saves a reference-only profile, and activates it
-without printing either API key. This intentionally avoids Agent Server 1.62's
-draft-profile validation path, which attempts to decrypt a plaintext draft key
-before its guarded preflight block when `OH_SECRET_KEY` is enabled.
+`local-code` proxy route, then uses Agent Server's settings API to encrypt and
+persist the LLM configuration without printing either API key. This
+intentionally avoids Agent Server 1.62's profile persistence paths, which
+return HTTP 500 with an encrypted provider reference or a plaintext draft key
+when `OH_SECRET_KEY` is enabled.
 Expose it through Tailscale Serve only after verifying authentication. Verify
 that every conversation is a rootless container before enabling GitHub
 automations. Never mount the rootful socket.
