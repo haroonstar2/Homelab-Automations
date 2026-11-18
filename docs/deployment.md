@@ -91,8 +91,9 @@ Install the pinned Node.js 24.22.3, uv 0.13.9, and
 sudo scripts/install-openhands-runtime.sh --apply
 ```
 
-The service listens only on host loopback port `18002`, requires its generated
-agent-only backend key, disables telemetry, and uses
+The service listens only on host loopback port `18002`; its internal Agent
+Server and automation processes use loopback ports `18100` and `18101` to avoid
+the Caddy listeners. It requires its generated agent-only backend key, disables telemetry, and uses
 `OH_CONVERSATION_RUNTIME=docker` with the `ai-agent` rootless Docker socket.
 Expose it through Tailscale Serve only after verifying authentication. Verify
 that every conversation is a rootless container before enabling GitHub
