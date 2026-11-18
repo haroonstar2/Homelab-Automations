@@ -112,6 +112,10 @@ The saved SDK model identifier is `litellm_proxy/local-code` and its compatible
 base URL is `http://127.0.0.1:14000/v1`; LiteLLM still routes the public model
 alias `local-code` to Ollama. The command writes the credential, base URL, and
 model in that order so every intermediate persisted LLM remains valid.
+OpenHands normally rejects contexts below 16,384 tokens. The qualified
+`local-code` route accurately advertises 14,336, so its protected service
+environment sets the SDK's documented `ALLOW_SHORT_CONTEXT_WINDOWS=true`
+override instead of overstating the model's capacity.
 Expose it through Tailscale Serve only after verifying authentication. Verify
 that every conversation is a rootless container before enabling GitHub
 automations. Never mount the rootful socket.

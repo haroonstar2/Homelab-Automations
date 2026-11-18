@@ -96,6 +96,7 @@ if [[ ! -s "$runtime_env" ]]; then
     printf 'DOCKER_HOST=unix:///run/user/%s/docker.sock\n' "$agent_uid"
     printf 'OH_CONVERSATION_RUNTIME=docker\n'
     printf 'OH_CANVAS_SAFE_STATE_DIR=%s/agent-canvas\n' "$state_root"
+    printf 'ALLOW_SHORT_CONTEXT_WINDOWS=true\n'
     printf 'AGENT_CANVAS_DISABLE_TELEMETRY=1\n'
   } >"$runtime_temp"
   install -m 0600 -o "$agent_user" -g "$agent_group" "$runtime_temp" "$runtime_env"

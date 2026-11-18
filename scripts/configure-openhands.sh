@@ -25,7 +25,7 @@ canvas_url="http://127.0.0.1:18002"
 litellm_url="http://127.0.0.1:14000"
 litellm_openai_url="$litellm_url/v1"
 
-for required in curl docker jq runuser sed mktemp; do
+for required in chown chmod curl docker grep jq mktemp runuser sed seq sleep systemctl; do
   command -v "$required" >/dev/null 2>&1 || {
     echo "Required command is missing: $required" >&2
     exit 1
@@ -94,6 +94,34 @@ runuser -u "$agent_user" -- env \
     echo "The ai-agent identity cannot access its rootless Docker daemon." >&2
     exit 1
   }
+
+if ! grep -Fqx 'ALLOW_SHORT_CONTEXT_WINDOWS=true' "$openhands_env"; then
+  if grep -q '^ALLOW_SHORT_CONTEXT_WINDOWS=' "$openhands_env"; then
+    sed -i 's/^ALLOW_SHORT_CONTEXT_WINDOWS=.*/ALLOW_SHORT_CONTEXT_WINDOWS=true/' \
+      "$openhands_env"
+  else
+    printf 'ALLOW_SHORT_CONTEXT_WINDOWS=true\n' >>"$openhands_env"
+  fi
+  chown "$agent_user:$(id -gn "$agent_user")" "$openhands_env"
+  chmod 0600 "$openhands_env"
+  runtime_dir="/run/user/$agent_uid"
+  runuser -u "$agent_user" -- env \
+    HOME="$agent_home" \
+    XDG_RUNTIME_DIR="$runtime_dir" \
+    DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime_dir/bus" \
+    systemctl --user restart agent-canvas.service
+  for _ in $(seq 1 60); do
+    if curl --fail --silent "$canvas_url/ready" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
+  curl --fail --silent --show-error "$canvas_url/ready" >/dev/null || {
+    echo "Agent Canvas did not become ready after enabling short contexts." >&2
+    exit 1
+  }
+fi
+
 curl --fail --silent --show-error \
   -H "Authorization: Bearer $litellm_key" \
   "$litellm_url/v1/models" >"$work/models.json"
@@ -182,4 +210,5 @@ jq -e '.choices[0].message.content | type == "string" and length > 0' \
 
 echo "Stored encrypted OpenHands LLM settings: litellm_proxy/local-code"
 echo "Completion route verified through authenticated LiteLLM: local-code"
+echo "Accepted qualified short context window: 14336 tokens"
 echo "Rootless Docker access verified for: $agent_user"
