@@ -47,6 +47,9 @@ install -d -m 0750 -o "$agent_user" -g "$agent_user" \
 # The released OpenHands Docker image uses uid 10001. Grant only its explicit
 # state and project roots; never make either directory world-writable.
 if command -v setfacl >/dev/null 2>&1; then
+  # The agent may traverse the platform root to its owned workspace subtree,
+  # but cannot list that root or read sibling service/backup directories.
+  setfacl -m "u:${agent_user}:--x" "$platform_root"
   setfacl -m u:10001:rwx "$platform_root/openhands/state" "$platform_root/workspaces/openhands"
 else
   echo "setfacl is required for the documented OpenHands container uid 10001." >&2

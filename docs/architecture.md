@@ -27,6 +27,8 @@ platform is operating and evidence shows one is necessary.
   control. Application authentication remains enabled as defense in depth.
 - Every agent receives one explicit workspace. No broad home or data-disk mount
   is permitted.
+- `ai-agent` has traverse-only ACL access on the platform root and owns only the
+  workspace subtree; it cannot list or read sibling service and backup state.
 
 Heavy local model concurrency is one until qualification data proves the host
 can safely support more.
