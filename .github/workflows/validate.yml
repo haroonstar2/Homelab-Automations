@@ -45,6 +45,7 @@ jobs:
           done
           find scripts tests -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
           python3 -m py_compile tests/model-qualification/qualify.py
+          python3 -m unittest discover -s tests/model-qualification -p 'test_*.py'
           python3 -m json.tool renovate.json >/dev/null
           python3 -m json.tool config/opencode/opencode.jsonc >/dev/null
 

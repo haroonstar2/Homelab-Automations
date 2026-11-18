@@ -104,7 +104,14 @@ def run(command: list[str], cwd: Path, timeout: int = 3600) -> subprocess.Comple
             stderr=subprocess.STDOUT,
             timeout=timeout,
             check=False,
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            env={
+                **os.environ,
+                # Some agent CLIs trust PWD instead of asking the operating
+                # system for the current directory. Keep it aligned with cwd.
+                "PWD": str(cwd),
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONIOENCODING": "utf-8",
+            },
         )
     except subprocess.TimeoutExpired as exc:
         output = exc.stdout or ""
