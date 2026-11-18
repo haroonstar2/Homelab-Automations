@@ -89,6 +89,7 @@ Install the pinned Node.js 24.22.3, uv 0.13.9, and
 
 ```bash
 sudo scripts/install-openhands-runtime.sh --apply
+sudo scripts/configure-openhands.sh --apply --env-file .env
 ```
 
 Public mode keeps backend-key authentication enabled, while the explicit host
@@ -96,6 +97,9 @@ argument restricts the service to loopback port `18002`. Its internal Agent
 Server and automation processes use loopback ports `18100` and `18101` to avoid
 the Caddy listeners. It requires its generated agent-only backend key, disables telemetry, and uses
 `OH_CONVERSATION_RUNTIME=docker` with the `ai-agent` rootless Docker socket.
+The configuration command stores the LiteLLM credential in Agent Canvas's
+encrypted provider store, saves a reference-only `local-code` profile, validates
+it against the proxy, and activates it without printing either API key.
 Expose it through Tailscale Serve only after verifying authentication. Verify
 that every conversation is a rootless container before enabling GitHub
 automations. Never mount the rootful socket.
