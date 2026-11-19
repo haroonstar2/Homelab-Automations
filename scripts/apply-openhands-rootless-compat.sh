@@ -48,6 +48,11 @@ if grep -q '^OH_ROOTLESS_RUNTIME_HOST_UID=' "$runtime_env"; then
 else
   printf 'OH_ROOTLESS_RUNTIME_HOST_UID=%s\n' "$mapped_runtime_uid" >>"$runtime_env"
 fi
+if grep -q '^OH_CONVERSATION_IMAGE=' "$runtime_env"; then
+  sed -i 's|^OH_CONVERSATION_IMAGE=.*|OH_CONVERSATION_IMAGE=ghcr.io/openhands/agent-server:1.62.0-python|' "$runtime_env"
+else
+  printf '%s\n' 'OH_CONVERSATION_IMAGE=ghcr.io/openhands/agent-server:1.62.0-python' >>"$runtime_env"
+fi
 chown "$agent_user:$agent_group" "$runtime_env"
 chmod 0600 "$runtime_env"
 

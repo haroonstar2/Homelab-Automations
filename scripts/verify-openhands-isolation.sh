@@ -34,6 +34,7 @@ mapped_container_uid=$((subuid_start + container_uid_expected - 1))
 runtime_dir="/run/user/$agent_uid"
 rootless_socket="$runtime_dir/docker.sock"
 canvas_url="http://127.0.0.1:18002"
+expected_image="ghcr.io/openhands/agent-server:1.62.0-python"
 openhands_env="$agent_home/.config/ai-platform/openhands.env"
 state_root="/mnt/Storage1/ai-platform/openhands/state"
 workspace_parent="/mnt/Storage1/ai-platform/workspaces/openhands"
@@ -245,6 +246,11 @@ done
 }
 
 agent_docker inspect "$container_id" >"$work/container-inspect.json"
+jq -e --arg image "$expected_image" '.[0].Config.Image == $image' \
+  "$work/container-inspect.json" >/dev/null || {
+  echo "Conversation container image is not pinned to $expected_image." >&2
+  exit 1
+}
 jq -e '
   .[0].State.Running == true and
   ([.[0].Mounts[]?.Source] | all(
@@ -297,6 +303,7 @@ fi
 
 echo "OpenHands isolation gate passed."
 echo "Conversation runtime: rootless Docker owned by $agent_user"
+echo "Conversation image: $expected_image"
 echo "Container user: uid $container_uid"
 echo "Docker socket exposure: none"
 echo "Workspace symlink boundary: container /etc, not host /etc"

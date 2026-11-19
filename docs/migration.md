@@ -5,9 +5,9 @@
 | Phase | Status | Gate |
 | --- | --- | --- |
 | 0 Preserve legacy | Complete | Remote Git snapshot, encrypted Restic snapshot, and byte-for-byte restore verified |
-| 1 Foundation | Repository implementation | Live isolation test not yet run |
-| 2 Model plane | Repository implementation | Qualification suite not yet passed |
-| 3 OpenHands | Not deployed | Per-conversation rootless isolation and GitHub draft PR required |
+| 1 Foundation | Deployed | Dedicated identities, storage, and rootless boundary verified |
+| 2 Model plane | Deployed | Both written qualification cases passed with retained evidence |
+| 3 OpenHands | Deployed; isolation passed | Disposable GitHub issue-to-draft-PR remains |
 | 4 Switch/Discord | Not deployed | Permanent name, Console, new Discord app, permissions required |
 | 5 Personal workflows | Not started | Core path must pass first |
 | 6 Recovery/observability | Not started | Restic restore and Uptime Kuma detection required |
@@ -64,5 +64,23 @@ The password file is separate at
 
 This local encrypted repository protects contents at rest but is not an offsite
 copy. Phase 6 still requires a second failure-domain backup.
+
+## OpenHands isolation evidence (2026-11-19)
+
+Agent Canvas 1.41.0 and Agent Server 1.62.0 run under `ai-agent` with its
+dedicated rootless Docker daemon. The live disposable-conversation gate proved:
+
+- the runtime container executes as non-root uid 1002;
+- neither rootless nor rootful Docker sockets are mounted into the container;
+- a workspace symlink to `/etc` resolves to the container filesystem, not host
+  `/etc`;
+- deleting the conversation removes its runtime container.
+
+Agent Server 1.62.0 creates mode-0700 bind directories and passes the host uid
+to `docker run`, which rootless Docker maps to a subordinate uid. The maintained,
+version-checked compatibility patch grants only that mapped uid access after
+directory creation and refuses to apply to a different Agent Server version.
+The remaining Phase 3 gate is a disposable GitHub issue producing a tested
+draft pull request without access to unrelated repositories or host secrets.
 
 

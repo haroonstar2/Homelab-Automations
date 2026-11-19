@@ -106,6 +106,7 @@ if [[ ! -s "$runtime_env" ]]; then
     printf 'AUTOMATION_KV_SECRET=%s\n' "$(openssl rand -hex 32)"
     printf 'DOCKER_HOST=unix:///run/user/%s/docker.sock\n' "$agent_uid"
     printf 'OH_CONVERSATION_RUNTIME=docker\n'
+    printf 'OH_CONVERSATION_IMAGE=ghcr.io/openhands/agent-server:1.62.0-python\n'
     printf 'OH_CANVAS_SAFE_STATE_DIR=%s/agent-canvas\n' "$state_root"
     printf 'ALLOW_SHORT_CONTEXT_WINDOWS=true\n'
     printf 'AGENT_CANVAS_DISABLE_TELEMETRY=1\n'
@@ -114,6 +115,9 @@ if [[ ! -s "$runtime_env" ]]; then
 fi
 if ! grep -q '^OH_ROOTLESS_RUNTIME_HOST_UID=' "$runtime_env"; then
   printf 'OH_ROOTLESS_RUNTIME_HOST_UID=%s\n' "$mapped_container_uid" >>"$runtime_env"
+fi
+if ! grep -q '^OH_CONVERSATION_IMAGE=' "$runtime_env"; then
+  printf '%s\n' 'OH_CONVERSATION_IMAGE=ghcr.io/openhands/agent-server:1.62.0-python' >>"$runtime_env"
 fi
 chown "$agent_user:$agent_group" "$runtime_env"
 chmod 0600 "$runtime_env"
