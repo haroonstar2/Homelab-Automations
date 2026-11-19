@@ -1,6 +1,6 @@
 --- openhands/agent_server/docker_runtime/registry.py
 +++ openhands/agent_server/docker_runtime/registry.py
-@@ -583,6 +583,19 @@
+@@ -583,6 +583,22 @@
              workspace_dir,
          ):
              directory.mkdir(parents=True, mode=0o700, exist_ok=True)
