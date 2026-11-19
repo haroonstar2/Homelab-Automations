@@ -1,6 +1,6 @@
 --- openhands/agent_server/docker_runtime/registry.py
 +++ openhands/agent_server/docker_runtime/registry.py
-@@ -583,6 +583,22 @@
+@@ -631,7 +631,23 @@
              workspace_dir,
          ):
              directory.mkdir(parents=True, mode=0o700, exist_ok=True)
@@ -20,6 +20,7 @@
 +                result = execute_command(["setfacl", "-m", acl, str(directory)])
 +                if result.returncode != 0:
 +                    raise RuntimeError(f"Failed to grant rootless runtime ACL: {result.stderr}")
+ 
          env = sanitized_env()
          env.update(
              {
