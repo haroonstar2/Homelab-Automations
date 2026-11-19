@@ -137,7 +137,11 @@ security is effective. Before its first start:
 3. Generate all secrets and set `SWITCH_GATEWAY_PUBLIC_URL` to the tailnet HTTPS
    URL.
 4. Install Switch Console 0.41.1 on the administrative workstation.
-5. Create a new Discord application; the legacy token stays active for rollback.
+5. Create a new self-registered Discord application and connect it from Switch
+   Console; the legacy token stays active for rollback. Keep the deployment-wide
+   `SWITCH_DISCORD_*` variables blank. Those belong to Switch's distributed-app
+   flow, which requires a public OAuth callback and is not used by this private
+   single-workspace deployment.
 
 Do not start Switch merely to see whether the configuration works. First-start
 identity choices are persistent.
