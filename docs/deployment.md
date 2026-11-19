@@ -57,13 +57,15 @@ Publish the loopback listeners to the tailnet after reviewing tailnet ACLs:
 
 ```bash
 tailscale serve --bg --https=443 http://127.0.0.1:18080
-tailscale serve --bg --https=8443 http://127.0.0.1:18000
+tailscale serve --bg --https=8445 http://127.0.0.1:18000
 tailscale serve --bg --https=8444 http://127.0.0.1:18001
 tailscale serve status
 ```
 
 The first command uses the normal tailnet HTTPS URL. Switch and OpenHands use
-explicit HTTPS ports on the same MagicDNS host. Do not use Funnel.
+explicit HTTPS ports on the same MagicDNS host. Switch uses 8445 because the
+preserved legacy code-server owns host port 8443; OpenHands uses 8444. Do not
+use Funnel.
 
 ## OpenHands runtime gate
 
@@ -150,7 +152,7 @@ sudo scripts/configure-switch.sh \
   --env-file .env \
   --server-name switch.home \
   --admin-email you@example.com \
-  --public-url https://haroonpcserver.tailc06d4.ts.net:8443
+  --public-url https://haroonpcserver.tailc06d4.ts.net:8445
 ```
 
 `SWITCH_SERVER_NAME` is the stable server half of Switch member identifiers;
