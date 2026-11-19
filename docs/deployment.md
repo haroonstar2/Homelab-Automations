@@ -159,6 +159,18 @@ value, generates only missing secrets, stores the generated administrator
 password only in the mode-0600 environment file, and runs `docker compose
 config --quiet`. It does not pull images, create the database, or start Switch.
 
+Once that preflight succeeds, deploy the pinned database and Switch service:
+
+```bash
+sudo scripts/deploy-switch.sh --apply --env-file .env
+```
+
+The deployment script always selects Docker's rootful `default` context even
+if the operator's current context is rootless. It requires the existing Caddy
+frontend network, pulls only the pinned Postgres and Switch images, waits for
+Switch health, rejects broad host or Docker-socket mounts, and probes the
+loopback Caddy route. It does not configure Tailscale Serve or Discord.
+
 Install the checksum-verified OpenCode 2.2.7 standalone Linux release for the
 dedicated agent identity with:
 
