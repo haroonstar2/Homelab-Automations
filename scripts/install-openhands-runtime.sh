@@ -43,8 +43,9 @@ state_root="$platform_root/openhands/state"
 workspace_root="$platform_root/workspaces/openhands"
 runtime_env="$agent_home/.config/ai-platform/openhands.env"
 user_unit_dir="$agent_home/.config/systemd/user"
+compat_share="$agent_home/.local/share/ai-platform"
 
-for required in awk curl tar xz sha256sum openssl setfacl; do
+for required in awk curl grep patch tar xz sha256sum openssl setfacl; do
   command -v "$required" >/dev/null 2>&1 || {
     echo "Required command is missing: $required" >&2
     exit 1
@@ -95,6 +96,7 @@ setfacl -m \
 
 install -d -m 0700 -o "$agent_user" -g "$agent_group" \
   "$agent_home/.config/ai-platform" "$user_unit_dir"
+install -d -m 0755 -o "$agent_user" -g "$agent_group" "$compat_share"
 if [[ ! -s "$runtime_env" ]]; then
   umask 077
   runtime_temp="$work/openhands.env"
@@ -110,6 +112,33 @@ if [[ ! -s "$runtime_env" ]]; then
   } >"$runtime_temp"
   install -m 0600 -o "$agent_user" -g "$agent_group" "$runtime_temp" "$runtime_env"
 fi
+if ! grep -q '^OH_ROOTLESS_RUNTIME_HOST_UID=' "$runtime_env"; then
+  printf 'OH_ROOTLESS_RUNTIME_HOST_UID=%s\n' "$mapped_container_uid" >>"$runtime_env"
+fi
+chown "$agent_user:$agent_group" "$runtime_env"
+chmod 0600 "$runtime_env"
+
+install -m 0755 -o "$agent_user" -g "$agent_group" \
+  "$repo_root/scripts/patch-openhands-rootless-runtime.sh" \
+  "$agent_home/.local/bin/patch-openhands-rootless-runtime"
+install -m 0644 -o "$agent_user" -g "$agent_group" \
+  "$repo_root/patches/openhands-agent-server-1.62.0-rootless-acl.patch" \
+  "$compat_share/openhands-agent-server-1.62.0-rootless-acl.patch"
+
+runuser -u "$agent_user" -- env \
+  HOME="$agent_home" \
+  PATH="$agent_home/.local/bin:/usr/local/bin:/usr/bin:/bin" \
+  uvx --python='>=3.12,<3.15' \
+    --from openhands-agent-server==1.62.0 \
+    --with openhands-sdk==1.62.0 \
+    --with openhands-tools==1.62.0 \
+    --with openhands-workspace==1.62.0 \
+    --with 'posthog>=6,<7' \
+    agent-server --help >/dev/null
+runuser -u "$agent_user" -- env \
+  HOME="$agent_home" \
+  PATH="$agent_home/.local/bin:/usr/local/bin:/usr/bin:/bin" \
+  patch-openhands-rootless-runtime
 
 install -m 0644 -o "$agent_user" -g "$agent_group" \
   "$repo_root/config/systemd/agent-canvas.service" "$user_unit_dir/agent-canvas.service"

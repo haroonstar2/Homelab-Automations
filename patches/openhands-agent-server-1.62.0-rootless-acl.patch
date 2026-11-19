@@ -1,0 +1,25 @@
+--- openhands/agent_server/docker_runtime/registry.py
++++ openhands/agent_server/docker_runtime/registry.py
+@@ -583,6 +583,19 @@
+             workspace_dir,
+         ):
+             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
++        rootless_runtime_host_uid = os.environ.get(
++            "OH_ROOTLESS_RUNTIME_HOST_UID"
++        )
++        if rootless_runtime_host_uid:
++            if not rootless_runtime_host_uid.isdecimal():
++                raise RuntimeError("OH_ROOTLESS_RUNTIME_HOST_UID must be numeric")
++            acl = f"u:{rootless_runtime_host_uid}:rwx,m::rwx"
++            for directory in (
++                persistence_dir,
++                worktrees_dir,
++                conversation_dir,
++                workspace_dir,
++            ):
++                result = execute_command(["setfacl", "-m", acl, str(directory)])
++                if result.returncode != 0:
++                    raise RuntimeError(f"Failed to grant rootless runtime ACL: {result.stderr}")
+         env = sanitized_env()
+         env.update(
+             {

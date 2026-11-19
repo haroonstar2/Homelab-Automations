@@ -13,6 +13,8 @@ Environment=OH_CANVAS_SAFE_AUTOMATION_PORT=18101
 EnvironmentFile=%h/.config/ai-platform/openhands.env
 WorkingDirectory=/mnt/Storage1/ai-platform/workspaces/openhands
 ExecStartPre=/usr/bin/docker info
+ExecStartPre=%h/.local/bin/uvx --python=>=3.12,<3.15 --from=openhands-agent-server==1.62.0 --with=openhands-sdk==1.62.0 --with=openhands-tools==1.62.0 --with=openhands-workspace==1.62.0 --with=posthog>=6,<7 agent-server --help
+ExecStartPre=%h/.local/bin/patch-openhands-rootless-runtime
 ExecStart=%h/.local/bin/agent-canvas --public --host 127.0.0.1 --port 18002
 Restart=on-failure
 RestartSec=5
