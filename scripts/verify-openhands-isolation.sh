@@ -12,8 +12,8 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-for required in awk chmod chown comm curl cut docker getent grep head id install jq mktemp \
-  readlink rm runuser sed seq setfacl sh sleep sort tail; do
+for required in awk chmod chown comm curl cut docker getent grep head id install jq kill mktemp \
+  mv readlink rm runuser sed seq setfacl sh sleep sort tail; do
   command -v "$required" >/dev/null 2>&1 || {
     echo "Required command is missing: $required" >&2
     exit 1
@@ -48,6 +48,7 @@ work="$(mktemp -d)"
 chmod 0700 "$work"
 conversation_id=""
 container_id=""
+watcher_pid=""
 
 agent_docker() {
   runuser -u "$agent_user" -- env \
@@ -68,6 +69,10 @@ delete_conversation() {
 }
 
 cleanup() {
+  if [[ -n "$watcher_pid" ]]; then
+    kill "$watcher_pid" >/dev/null 2>&1 || true
+    wait "$watcher_pid" >/dev/null 2>&1 || true
+  fi
   delete_conversation
   if [[ -n "$workspace" && "$workspace" == "$workspace_parent"/isolation-gate.* ]]; then
     rm -rf -- "$workspace"
@@ -117,6 +122,46 @@ jq -e '
 agent_docker ps -aq --filter label=ai.openhands.runtime-owner \
   | sort >"$work/containers-before.txt"
 
+capture_runtime_diagnostics() {
+  local observed_id log_pid poll
+  for _ in $(seq 1 18000); do
+    agent_docker ps -aq --filter label=ai.openhands.runtime-owner \
+      | sort >"$work/diagnostic-containers.txt"
+    observed_id="$(comm -13 "$work/containers-before.txt" \
+      "$work/diagnostic-containers.txt" | head -n 1)"
+    if [[ -n "$observed_id" ]]; then
+      printf '%s\n' "$observed_id" >"$work/diagnostic-container-id.txt"
+      agent_docker logs --follow --timestamps "$observed_id" \
+        >"$work/runtime.log" 2>&1 &
+      log_pid=$!
+      for poll in $(seq 1 120); do
+        if ! agent_docker inspect "$observed_id" \
+          >"$work/runtime-inspect-full.json" 2>/dev/null; then
+          break
+        fi
+        jq '.[0] | {
+          id: .Id,
+          image: .Config.Image,
+          user: .Config.User,
+          path: .Path,
+          args: .Args,
+          state: .State,
+          mounts: [.Mounts[]? | {type: .Type, source: .Source, destination: .Destination, rw: .RW}],
+          network_mode: .HostConfig.NetworkMode,
+          readonly_rootfs: .HostConfig.ReadonlyRootfs
+        }' "$work/runtime-inspect-full.json" \
+          >"$work/runtime-inspect-safe.tmp"
+        mv "$work/runtime-inspect-safe.tmp" "$work/runtime-inspect-safe.json"
+        sleep 0.1
+      done
+      kill "$log_pid" >/dev/null 2>&1 || true
+      wait "$log_pid" >/dev/null 2>&1 || true
+      return 0
+    fi
+    sleep 0.1
+  done
+}
+
 jq -n \
   --arg workspace "$workspace" \
   --slurpfile settings "$work/settings.json" \
@@ -134,6 +179,8 @@ jq -n \
   }' >"$work/conversation-request.json"
 
 echo "Creating disposable OpenHands conversation container..."
+capture_runtime_diagnostics &
+watcher_pid=$!
 status="$(curl --silent --show-error \
   --max-time 1800 \
   --request POST \
@@ -144,11 +191,32 @@ status="$(curl --silent --show-error \
   --write-out '%{http_code}' \
   "$canvas_url/api/conversations")"
 if [[ "$status" != "200" && "$status" != "201" ]]; then
+  wait "$watcher_pid" >/dev/null 2>&1 || true
+  watcher_pid=""
   echo "Conversation creation returned HTTP $status." >&2
   jq -r '.detail // .message // "No diagnostic message"' \
     "$work/conversation-response.json" >&2 || true
+  if [[ -s "$work/runtime-inspect-safe.json" ]]; then
+    echo "Short-lived runtime container:" >&2
+    jq . "$work/runtime-inspect-safe.json" >&2
+  fi
+  if [[ -s "$work/runtime.log" ]]; then
+    llm_key="$(jq -r '.agent_settings.llm.api_key // empty' "$work/settings.json")"
+    echo "Redacted runtime log:" >&2
+    if [[ -n "$llm_key" ]]; then
+      sed -e "s/${backend_key}/[REDACTED_BACKEND_KEY]/g" \
+        -e "s/${llm_key}/[REDACTED_LLM_KEY]/g" \
+        "$work/runtime.log" | tail -n 100 >&2
+    else
+      sed -e "s/${backend_key}/[REDACTED_BACKEND_KEY]/g" \
+        "$work/runtime.log" | tail -n 100 >&2
+    fi
+  fi
   exit 1
 fi
+
+wait "$watcher_pid" >/dev/null 2>&1 || true
+watcher_pid=""
 
 conversation_id="$(jq -r '.id // .conversation_id // empty' \
   "$work/conversation-response.json")"
