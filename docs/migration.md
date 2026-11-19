@@ -8,7 +8,7 @@
 | 1 Foundation | Deployed | Dedicated identities, storage, and rootless boundary verified |
 | 2 Model plane | Deployed | Both written qualification cases passed with retained evidence |
 | 3 OpenHands | Deployed; isolation passed | Disposable GitHub issue-to-draft-PR remains |
-| 4 Switch/Discord | Not deployed | Permanent name, Console, new Discord app, permissions required |
+| 4 Switch/Discord | Deployed; private HTTPS verified | `switch.home`, Switch Console 0.41.1 installed; Console sign-in, new Discord app, agents, and permission gate remain |
 | 5 Personal workflows | Not started | Core path must pass first |
 | 6 Recovery/observability | Not started | Restic restore and Uptime Kuma detection required |
 | 7 Cutover | Forbidden | All 20 acceptance tests must pass |
