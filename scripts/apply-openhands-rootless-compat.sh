@@ -33,6 +33,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_env="$agent_home/.config/ai-platform/openhands.env"
 runtime_dir="/run/user/$agent_uid"
 compat_share="$agent_home/.local/share/ai-platform"
+compat_workdir="/mnt/Storage1/ai-platform/workspaces/openhands"
 
 install -d -m 0755 -o "$agent_user" -g "$agent_group" "$compat_share"
 install -m 0755 -o "$agent_user" -g "$agent_group" \
@@ -50,6 +51,7 @@ fi
 chown "$agent_user:$agent_group" "$runtime_env"
 chmod 0600 "$runtime_env"
 
+cd "$compat_workdir"
 runuser -u "$agent_user" -- env \
   HOME="$agent_home" \
   PATH="$agent_home/.local/bin:/usr/local/bin:/usr/bin:/bin" \

@@ -125,6 +125,7 @@ install -m 0644 -o "$agent_user" -g "$agent_group" \
   "$repo_root/patches/openhands-agent-server-1.62.0-rootless-acl.patch" \
   "$compat_share/openhands-agent-server-1.62.0-rootless-acl.patch"
 
+cd "$workspace_root"
 runuser -u "$agent_user" -- env \
   HOME="$agent_home" \
   PATH="$agent_home/.local/bin:/usr/local/bin:/usr/bin:/bin" \
