@@ -140,6 +140,25 @@ security is effective. Before its first start:
 Do not start Switch merely to see whether the configuration works. First-start
 identity choices are persistent.
 
+After choosing the identity and an administrator address, populate the
+server-side environment file and render the pinned Compose contract without
+starting it:
+
+```bash
+sudo scripts/configure-switch.sh \
+  --apply \
+  --env-file .env \
+  --server-name switch.home \
+  --admin-email you@example.com \
+  --public-url https://haroonpcserver.tailc06d4.ts.net:8443
+```
+
+`SWITCH_SERVER_NAME` is the stable server half of Switch member identifiers;
+Switch does not contact that name. The script refuses to replace a non-empty
+value, generates only missing secrets, stores the generated administrator
+password only in the mode-0600 environment file, and runs `docker compose
+config --quiet`. It does not pull images, create the database, or start Switch.
+
 Install the checksum-verified OpenCode 2.2.7 standalone Linux release for the
 dedicated agent identity with:
 
