@@ -12,7 +12,7 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-for required in awk chmod chown comm curl cut docker getent grep head id install jq kill mktemp \
+for required in awk chmod chown comm curl cut docker find getent grep head id install jq kill mktemp \
   mv readlink rm runuser sed seq setfacl sh sleep sort tail; do
   command -v "$required" >/dev/null 2>&1 || {
     echo "Required command is missing: $required" >&2
@@ -24,7 +24,7 @@ agent_user="ai-agent"
 agent_group="$(id -gn "$agent_user")"
 agent_uid="$(id -u "$agent_user")"
 agent_home="$(getent passwd "$agent_user" | cut -d: -f6)"
-container_uid_expected=10001
+container_uid_expected="$agent_uid"
 subuid_start="$(awk -F: -v user="$agent_user" '$1 == user { print $2; exit }' /etc/subuid)"
 [[ "$subuid_start" =~ ^[0-9]+$ ]] || {
   echo "No subordinate UID range exists for $agent_user." >&2
@@ -35,6 +35,7 @@ runtime_dir="/run/user/$agent_uid"
 rootless_socket="$runtime_dir/docker.sock"
 canvas_url="http://127.0.0.1:18002"
 openhands_env="$agent_home/.config/ai-platform/openhands.env"
+state_root="/mnt/Storage1/ai-platform/openhands/state"
 workspace_parent="/mnt/Storage1/ai-platform/workspaces/openhands"
 workspace=""
 
@@ -100,7 +101,12 @@ fi
 install -d -m 0700 -o "$agent_user" -g "$agent_group" "$workspace_parent"
 workspace="$(mktemp -d "$workspace_parent/isolation-gate.XXXXXXXX")"
 chown "$agent_user:$agent_group" "$workspace"
-setfacl -m "u:${mapped_container_uid}:rwx,m::rwx" "$workspace"
+setfacl -m \
+  "u:${mapped_container_uid}:rwx,m::rwx,d:u:${mapped_container_uid}:rwx,d:m::rwx" \
+  "$workspace"
+find "$state_root" -type d -exec setfacl -m \
+  "u:${mapped_container_uid}:rwx,m::rwx,d:u:${mapped_container_uid}:rwx,d:m::rwx" \
+  {} +
 runuser -u "$agent_user" -- sh -c \
   'printf "%s\n" openhands-isolation-gate >"$1/sentinel.txt"; ln -sfn /etc "$1/escape"' \
   sh "$workspace"
